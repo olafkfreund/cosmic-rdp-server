@@ -60,8 +60,9 @@ gstreamer-video = "0.23"
 # Clipboard
 arboard = "3"
 
-# Input injection
-enigo = { version = "0.6", features = ["libei_tokio"] }
+# Input injection (direct libei protocol via reis)
+reis = { version = "0.5", features = ["tokio"] }
+rustix = { version = "0.38", features = ["event"] }
 
 # TLS
 tokio-rustls = "0.26"

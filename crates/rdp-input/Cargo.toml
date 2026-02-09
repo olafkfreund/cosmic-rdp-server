@@ -9,8 +9,10 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-# Input injection
-enigo.workspace = true
+# Input injection (direct libei protocol)
+reis.workspace = true
+ashpd.workspace = true
+rustix.workspace = true
 
 # Async
 tokio.workspace = true

@@ -9,9 +9,8 @@ use ironrdp_server::{
     RdpServerInputHandler, SoundServerFactory,
 };
 use ironrdp_pdu::pointer::PointerPositionAttribute;
-use enigo::{Button, Direction};
 use rdp_capture::{CaptureEvent, CapturedFrame, CursorInfo, DesktopInfo};
-use rdp_input::EnigoInput;
+use rdp_input::{EiInput, MouseButton};
 use tokio::sync::mpsc;
 
 use crate::tls::TlsContext;
@@ -39,19 +38,15 @@ impl RdpServerInputHandler for StaticInputHandler {
 
 /// Input handler that injects keyboard and mouse events into the compositor.
 ///
-/// Wraps an [`EnigoInput`] backend and maps all RDP events to
-/// the appropriate enigo/libei calls.
+/// Wraps an [`EiInput`] backend and maps all RDP events to
+/// the appropriate reis/libei calls.
 pub struct LiveInputHandler {
-    input: EnigoInput,
+    input: EiInput,
 }
 
 impl LiveInputHandler {
     /// Create a new live input handler.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the input backend cannot connect to the compositor.
-    pub fn new(input: EnigoInput) -> Self {
+    pub fn new(input: EiInput) -> Self {
         Self { input }
     }
 }
@@ -87,34 +82,34 @@ impl RdpServerInputHandler for LiveInputHandler {
                 self.input.mouse_rel_move(x, y);
             }
             MouseEvent::LeftPressed => {
-                self.input.mouse_button(Button::Left, Direction::Press);
+                self.input.mouse_button(MouseButton::Left, true);
             }
             MouseEvent::LeftReleased => {
-                self.input.mouse_button(Button::Left, Direction::Release);
+                self.input.mouse_button(MouseButton::Left, false);
             }
             MouseEvent::RightPressed => {
-                self.input.mouse_button(Button::Right, Direction::Press);
+                self.input.mouse_button(MouseButton::Right, true);
             }
             MouseEvent::RightReleased => {
-                self.input.mouse_button(Button::Right, Direction::Release);
+                self.input.mouse_button(MouseButton::Right, false);
             }
             MouseEvent::MiddlePressed => {
-                self.input.mouse_button(Button::Middle, Direction::Press);
+                self.input.mouse_button(MouseButton::Middle, true);
             }
             MouseEvent::MiddleReleased => {
-                self.input.mouse_button(Button::Middle, Direction::Release);
+                self.input.mouse_button(MouseButton::Middle, false);
             }
             MouseEvent::Button4Pressed => {
-                self.input.mouse_button(Button::Back, Direction::Press);
+                self.input.mouse_button(MouseButton::Back, true);
             }
             MouseEvent::Button4Released => {
-                self.input.mouse_button(Button::Back, Direction::Release);
+                self.input.mouse_button(MouseButton::Back, false);
             }
             MouseEvent::Button5Pressed => {
-                self.input.mouse_button(Button::Forward, Direction::Press);
+                self.input.mouse_button(MouseButton::Forward, true);
             }
             MouseEvent::Button5Released => {
-                self.input.mouse_button(Button::Forward, Direction::Release);
+                self.input.mouse_button(MouseButton::Forward, false);
             }
             MouseEvent::VerticalScroll { value } => {
                 self.input.scroll_vertical(i32::from(value));

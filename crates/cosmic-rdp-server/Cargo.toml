@@ -19,9 +19,6 @@ rdp-input.workspace = true
 rdp-encode.workspace = true
 rdp-dbus.workspace = true
 
-# Input injection
-enigo.workspace = true
-
 # RDP protocol
 ironrdp-server.workspace = true
 ironrdp-cliprdr.workspace = true

@@ -210,10 +210,10 @@ async fn run_live_or_fallback(
 
             let live_display = server::LiveDisplay::new(event_rx, &desktop_info);
 
-            let input_handler = match rdp_input::EnigoInput::new() {
-                Ok(enigo) => {
+            let input_handler = match rdp_input::EiInput::new().await {
+                Ok(ei_input) => {
                     tracing::info!("Input injection active (libei)");
-                    server::LiveInputHandler::new(enigo)
+                    server::LiveInputHandler::new(ei_input)
                 }
                 Err(e) => {
                     tracing::warn!("Failed to initialize input injection: {e}");
