@@ -91,7 +91,7 @@ async fn main() -> Result<()> {
         };
 
         tracing::info!(bind = %cfg.bind, "Starting cosmic-rdp-server");
-        dbus_state.set_running().await;
+        dbus_state.set_status(rdp_dbus::types::ServerStatus::Running).await;
 
         let result = if cfg.static_display {
             tracing::info!("Using static blue screen display");
@@ -112,12 +112,12 @@ async fn main() -> Result<()> {
                 cfg = load_and_merge_config(&cli)?;
             }
             Ok(ShutdownReason::Stop | ShutdownReason::Signal) => {
-                dbus_state.set_stopped().await;
+                dbus_state.set_status(rdp_dbus::types::ServerStatus::Stopped).await;
                 tracing::info!("Server stopped");
                 return Ok(());
             }
             Err(e) => {
-                dbus_state.set_error().await;
+                dbus_state.set_status(rdp_dbus::types::ServerStatus::Error).await;
                 return Err(e);
             }
         }

@@ -1561,15 +1561,12 @@ name = "cosmic-rdp-settings"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "dirs",
  "i18n-embed 0.15.4",
  "i18n-embed-fl 0.9.4",
  "libcosmic",
  "rdp-dbus",
  "rust-embed",
- "serde",
  "tokio",
- "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
  "zbus 5.13.2",
@@ -6427,8 +6424,12 @@ dependencies = [
 name = "rdp-dbus"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "dirs",
  "serde",
  "tokio",
+ "toml 0.8.23",
+ "tracing",
  "zbus 5.13.2",
 ]
 

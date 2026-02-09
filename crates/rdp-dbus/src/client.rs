@@ -1,5 +1,3 @@
-use crate::types::ClientInfo;
-
 /// D-Bus proxy for the COSMIC RDP Server daemon.
 ///
 /// Used by the settings UI to query status and send commands.
@@ -18,16 +16,9 @@ pub trait RdpServer {
     /// Tell the daemon to shut down gracefully.
     fn stop(&self) -> zbus::Result<bool>;
 
-    /// Get the list of connected clients.
-    fn get_clients(&self) -> zbus::Result<Vec<ClientInfo>>;
-
     /// Whether the server is currently running.
     #[zbus(property)]
     fn running(&self) -> zbus::Result<bool>;
-
-    /// Number of active client connections.
-    #[zbus(property)]
-    fn active_connections(&self) -> zbus::Result<u32>;
 
     /// The address the server is bound to.
     #[zbus(property)]

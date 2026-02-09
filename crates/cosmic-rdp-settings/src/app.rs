@@ -21,7 +21,6 @@ pub struct App {
 
     // -- Server status (from D-Bus) --
     server_running: bool,
-    active_connections: u32,
     bound_address: String,
 
     // -- General settings --
@@ -50,6 +49,9 @@ pub struct App {
     audio_enable: bool,
     sample_rate_idx: usize,
     channels_idx: usize,
+
+    // -- Error display --
+    error_message: Option<String>,
 
     // -- Dropdown labels (owned for lifetime) --
     encoder_labels: Vec<String>,
@@ -99,6 +101,40 @@ impl App {
             .iter()
             .position(|&c| c == cfg.audio.channels)
             .unwrap_or(1);
+    }
+
+    /// Validate the current UI inputs. Returns an error message if invalid.
+    fn validate(&self) -> Option<String> {
+        if let Err(_e) = self.port.parse::<u16>() {
+            return Some("Port must be a number between 1 and 65535".to_string());
+        }
+        if let Err(_e) = self.fps.parse::<u32>() {
+            return Some("FPS must be a positive number".to_string());
+        }
+        if let Ok(fps) = self.fps.parse::<u32>() {
+            if fps == 0 || fps > 240 {
+                return Some("FPS must be between 1 and 240".to_string());
+            }
+        }
+        if let Err(_e) = self.bitrate_mbps.parse::<f64>() {
+            return Some("Bitrate must be a number (Mbps)".to_string());
+        }
+        if let Ok(mbps) = self.bitrate_mbps.parse::<f64>() {
+            if mbps <= 0.0 || mbps > 100.0 {
+                return Some("Bitrate must be between 0.1 and 100 Mbps".to_string());
+            }
+        }
+        if let Err(_e) = self.buffer_capacity.parse::<usize>() {
+            return Some("Buffer capacity must be a positive number".to_string());
+        }
+        // Validate bind address can form a valid socket address.
+        if format!("{}:{}", self.bind_address, self.port)
+            .parse::<SocketAddr>()
+            .is_err()
+        {
+            return Some("Invalid bind address or port".to_string());
+        }
+        None
     }
 
     /// Build a [`ServerConfig`] from the current UI state.
@@ -220,7 +256,6 @@ impl Application for App {
             current_page: Page::General,
             nav,
             server_running: false,
-            active_connections: 0,
             bound_address: String::new(),
             bind_address: "0.0.0.0".to_string(),
             port: "3389".to_string(),
@@ -248,11 +283,12 @@ impl Application for App {
                 fl!("display-encoder-software"),
             ],
             sample_rate_labels: vec!["44100 Hz".to_string(), "48000 Hz".to_string()],
+            error_message: None,
             channel_labels: vec![fl!("features-channels-mono"), fl!("features-channels-stereo")],
         };
 
         let task = cosmic::task::future(async {
-            match config::load() {
+            match config::load(None) {
                 Ok(cfg) => Message::ConfigLoaded(Box::new(cfg)),
                 Err(e) => Message::Error(e.to_string()),
             }
@@ -275,7 +311,6 @@ impl Application for App {
                 &self.port,
                 self.static_display,
                 self.server_running,
-                self.active_connections,
                 &self.bound_address,
             ),
             Page::Security => crate::pages::security::view(
@@ -305,7 +340,13 @@ impl Application for App {
             ),
         };
 
-        widget::container(page_content)
+        let mut layout = widget::column().spacing(8).push(page_content);
+
+        if let Some(ref err) = self.error_message {
+            layout = layout.push(widget::text::body(err.clone()));
+        }
+
+        widget::container(layout)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(24)
@@ -341,8 +382,13 @@ impl Application for App {
             Message::SampleRate(idx) => self.sample_rate_idx = idx,
             Message::Channels(idx) => self.channels_idx = idx,
 
-            // Apply: save config + D-Bus reload
+            // Apply: validate, save config + D-Bus reload
             Message::Apply => {
+                if let Some(err) = self.validate() {
+                    self.error_message = Some(err);
+                    return cosmic::task::none();
+                }
+                self.error_message = None;
                 let cfg = self.build_config();
                 return cosmic::task::future(async move {
                     if let Err(e) = config::save(&cfg) {
@@ -358,7 +404,7 @@ impl Application for App {
             // Reset: reload config from disk
             Message::Reset => {
                 return cosmic::task::future(async {
-                    match config::load() {
+                    match config::load(None) {
                         Ok(cfg) => Message::ConfigLoaded(Box::new(cfg)),
                         Err(e) => Message::Error(e.to_string()),
                     }
@@ -368,8 +414,10 @@ impl Application for App {
             // Toggle server via D-Bus
             Message::ToggleServer(enable) => {
                 if enable {
-                    tracing::info!("Server start requested - use systemctl or CLI");
+                    self.error_message =
+                        Some("Start the server via: systemctl --user start cosmic-rdp-server".to_string());
                 } else {
+                    self.error_message = None;
                     return cosmic::task::future(async {
                         match dbus_stop().await {
                             Ok(()) => Message::StopSent,
@@ -382,16 +430,13 @@ impl Application for App {
             // D-Bus status update
             Message::StatusUpdate {
                 running,
-                connections,
                 address,
             } => {
                 self.server_running = running;
-                self.active_connections = connections;
                 self.bound_address = address;
             }
             Message::DbusUnavailable => {
                 self.server_running = false;
-                self.active_connections = 0;
                 self.bound_address.clear();
             }
 
@@ -401,19 +446,20 @@ impl Application for App {
             }
             Message::ConfigSaved => {
                 tracing::info!("Configuration saved and reload sent");
+                self.error_message = None;
             }
             Message::StopSent => {}
             Message::Error(e) => {
                 tracing::error!("Settings error: {e}");
+                self.error_message = Some(e);
             }
 
             // Poll D-Bus for server status
             Message::PollStatus => {
                 return cosmic::task::future(async {
                     match dbus_poll_status().await {
-                        Ok((running, connections, address)) => Message::StatusUpdate {
+                        Ok((running, address)) => Message::StatusUpdate {
                             running,
-                            connections,
                             address,
                         },
                         Err(_) => Message::DbusUnavailable,
@@ -438,28 +484,98 @@ impl Application for App {
     }
 }
 
-/// Send a D-Bus `Reload()` to the daemon.
+/// Cached D-Bus proxy for communicating with the daemon.
+///
+/// Lazily connects on first use and reuses the connection for all
+/// subsequent calls, avoiding the overhead of reconnecting every 2 seconds.
+struct DbusProxy {
+    proxy: Option<rdp_dbus::client::RdpServerProxy<'static>>,
+}
+
+impl DbusProxy {
+    const fn new() -> Self {
+        Self { proxy: None }
+    }
+
+    /// Get or create the proxy. Returns `None` if the daemon is unreachable.
+    async fn get(&mut self) -> anyhow::Result<&rdp_dbus::client::RdpServerProxy<'static>> {
+        if self.proxy.is_none() {
+            let connection = zbus::Connection::session().await?;
+            let proxy = rdp_dbus::client::RdpServerProxy::new(&connection).await?;
+            self.proxy = Some(proxy);
+        }
+        Ok(self.proxy.as_ref().expect("just set"))
+    }
+
+    /// Invalidate the cached connection (e.g. after a D-Bus error).
+    fn invalidate(&mut self) {
+        self.proxy = None;
+    }
+
+    /// Send a D-Bus `Reload()` to the daemon.
+    async fn reload(&mut self) -> anyhow::Result<()> {
+        match self.get().await {
+            Ok(proxy) => {
+                proxy.reload().await?;
+                Ok(())
+            }
+            Err(e) => {
+                self.invalidate();
+                Err(e)
+            }
+        }
+    }
+
+    /// Send a D-Bus `Stop()` to the daemon.
+    async fn stop(&mut self) -> anyhow::Result<()> {
+        match self.get().await {
+            Ok(proxy) => {
+                proxy.stop().await?;
+                Ok(())
+            }
+            Err(e) => {
+                self.invalidate();
+                Err(e)
+            }
+        }
+    }
+
+    /// Poll D-Bus for the current server status.
+    async fn poll_status(&mut self) -> anyhow::Result<(bool, String)> {
+        match self.get().await {
+            Ok(proxy) => {
+                let running = proxy.running().await?;
+                let address = proxy.bound_address().await?;
+                Ok((running, address))
+            }
+            Err(e) => {
+                self.invalidate();
+                Err(e)
+            }
+        }
+    }
+}
+
+/// Shared cached D-Bus proxy instance.
+///
+/// Uses a `tokio::sync::Mutex` to safely share the cached proxy across
+/// async task boundaries. All D-Bus operations go through this single
+/// instance to avoid reconnecting for every call.
+fn shared_proxy() -> &'static tokio::sync::Mutex<DbusProxy> {
+    use std::sync::LazyLock;
+    static PROXY: LazyLock<tokio::sync::Mutex<DbusProxy>> =
+        LazyLock::new(|| tokio::sync::Mutex::new(DbusProxy::new()));
+    &PROXY
+}
+
+async fn dbus_poll_status() -> anyhow::Result<(bool, String)> {
+    shared_proxy().lock().await.poll_status().await
+}
+
 async fn dbus_reload() -> anyhow::Result<()> {
-    let connection = zbus::Connection::session().await?;
-    let proxy = rdp_dbus::client::RdpServerProxy::new(&connection).await?;
-    proxy.reload().await?;
-    Ok(())
+    shared_proxy().lock().await.reload().await
 }
 
-/// Send a D-Bus `Stop()` to the daemon.
 async fn dbus_stop() -> anyhow::Result<()> {
-    let connection = zbus::Connection::session().await?;
-    let proxy = rdp_dbus::client::RdpServerProxy::new(&connection).await?;
-    proxy.stop().await?;
-    Ok(())
-}
-
-/// Poll D-Bus for the current server status.
-async fn dbus_poll_status() -> anyhow::Result<(bool, u32, String)> {
-    let connection = zbus::Connection::session().await?;
-    let proxy = rdp_dbus::client::RdpServerProxy::new(&connection).await?;
-    let running = proxy.running().await?;
-    let connections = proxy.active_connections().await?;
-    let address = proxy.bound_address().await?;
-    Ok((running, connections, address))
+    shared_proxy().lock().await.stop().await
 }

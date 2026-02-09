@@ -6,13 +6,11 @@ use crate::fl;
 use crate::message::Message;
 
 /// Render the General settings page.
-#[allow(clippy::too_many_arguments)]
 pub fn view<'a>(
     bind_address: &'a str,
     port: &'a str,
     static_display: bool,
     server_running: bool,
-    active_connections: u32,
     bound_address: &'a str,
 ) -> Element<'a, Message> {
     let status_label = if server_running {
@@ -34,13 +32,6 @@ pub fn view<'a>(
                 ))
                 .add(settings::item_row(vec![
                     widget::text::body(format!("{}: {status_label}", fl!("general-status"))).into(),
-                ]))
-                .add(settings::item_row(vec![
-                    widget::text::body(format!(
-                        "{}: {active_connections}",
-                        fl!("general-connections")
-                    ))
-                    .into(),
                 ])),
         );
 
@@ -73,18 +64,7 @@ pub fn view<'a>(
 
     content = content.push(network_section);
 
-    content = content.push(
-        widget::row()
-            .spacing(8)
-            .push(
-                widget::button::standard(fl!("general-apply"))
-                    .on_press(Message::Apply),
-            )
-            .push(
-                widget::button::standard(fl!("general-reset"))
-                    .on_press(Message::Reset),
-            ),
-    );
+    content = content.push(super::action_buttons());
 
     content.into()
 }

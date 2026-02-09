@@ -59,7 +59,6 @@ pub enum Message {
     /// Server status update from D-Bus polling.
     StatusUpdate {
         running: bool,
-        connections: u32,
         address: String,
     },
     /// D-Bus is not available.

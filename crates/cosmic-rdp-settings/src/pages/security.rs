@@ -71,18 +71,7 @@ pub fn view<'a>(
         );
     }
 
-    content = content.push(
-        widget::row()
-            .spacing(8)
-            .push(
-                widget::button::standard(fl!("general-apply"))
-                    .on_press(Message::Apply),
-            )
-            .push(
-                widget::button::standard(fl!("general-reset"))
-                    .on_press(Message::Reset),
-            ),
-    );
+    content = content.push(super::action_buttons());
 
     content.into()
 }

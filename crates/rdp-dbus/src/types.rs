@@ -27,7 +27,10 @@ impl std::fmt::Display for ServerStatus {
 }
 
 /// Information about a connected RDP client.
+///
+/// Reserved for future use when client connection tracking is implemented.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[allow(dead_code)]
 pub struct ClientInfo {
     /// Remote address of the client.
     pub address: String,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use zbus::interface;
 
-use crate::types::{ClientInfo, ServerStatus};
+use crate::types::ServerStatus;
 
 /// Shared state exposed over D-Bus by the daemon.
 #[derive(Debug, Clone)]
@@ -15,7 +15,6 @@ pub struct RdpServerState {
 struct Inner {
     status: ServerStatus,
     bound_address: String,
-    clients: Vec<ClientInfo>,
 }
 
 impl RdpServerState {
@@ -26,24 +25,13 @@ impl RdpServerState {
             inner: Arc::new(RwLock::new(Inner {
                 status: ServerStatus::Starting,
                 bound_address,
-                clients: Vec::new(),
             })),
         }
     }
 
-    /// Mark the server as running.
-    pub async fn set_running(&self) {
-        self.inner.write().await.status = ServerStatus::Running;
-    }
-
-    /// Mark the server as stopped.
-    pub async fn set_stopped(&self) {
-        self.inner.write().await.status = ServerStatus::Stopped;
-    }
-
-    /// Mark the server as errored.
-    pub async fn set_error(&self) {
-        self.inner.write().await.status = ServerStatus::Error;
+    /// Update the server status.
+    pub async fn set_status(&self, status: ServerStatus) {
+        self.inner.write().await.status = status;
     }
 
     /// Get current status.
@@ -96,11 +84,6 @@ impl RdpServerInterface {
         self.cmd_tx.send(DaemonCommand::Stop).await.is_ok()
     }
 
-    /// Get the list of connected clients.
-    async fn get_clients(&self) -> Vec<ClientInfo> {
-        self.state.inner.read().await.clients.clone()
-    }
-
     /// Whether the server is currently running.
     #[zbus(property)]
     async fn running(&self) -> bool {
@@ -108,14 +91,6 @@ impl RdpServerInterface {
             self.state.inner.read().await.status,
             ServerStatus::Running
         )
-    }
-
-    /// Number of active client connections.
-    #[zbus(property)]
-    async fn active_connections(&self) -> u32 {
-        #[allow(clippy::cast_possible_truncation)]
-        let count = self.state.inner.read().await.clients.len() as u32;
-        count
     }
 
     /// The address the server is bound to.

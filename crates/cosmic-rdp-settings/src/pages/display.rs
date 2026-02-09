@@ -68,18 +68,7 @@ pub fn view<'a>(
                         .width(Length::Fixed(80.0)),
                 )),
         )
-        .push(
-            widget::row()
-                .spacing(8)
-                .push(
-                    widget::button::standard(fl!("general-apply"))
-                        .on_press(Message::Apply),
-                )
-                .push(
-                    widget::button::standard(fl!("general-reset"))
-                        .on_press(Message::Reset),
-                ),
-        );
+        .push(super::action_buttons());
 
     content.into()
 }

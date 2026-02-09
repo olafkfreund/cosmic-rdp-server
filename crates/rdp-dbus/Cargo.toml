@@ -10,5 +10,9 @@ authors.workspace = true
 
 [dependencies]
 serde.workspace = true
+toml.workspace = true
+anyhow.workspace = true
+dirs.workspace = true
+tracing.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 zbus = { workspace = true, default-features = false }
