@@ -10,7 +10,8 @@ use enigo::{Button, Direction};
 use rdp_capture::{CapturedFrame, DesktopInfo};
 use rdp_input::EnigoInput;
 use tokio::sync::mpsc;
-use tokio_rustls::TlsAcceptor;
+
+use crate::tls::TlsContext;
 
 const DEFAULT_WIDTH: u16 = 1920;
 const DEFAULT_HEIGHT: u16 = 1080;
@@ -298,43 +299,94 @@ fn frame_to_bitmap(frame: CapturedFrame) -> Result<BitmapUpdate> {
     })
 }
 
+// --------------- Authentication ---------------
+
+/// NLA authentication credentials.
+pub struct AuthCredentials {
+    /// Username.
+    pub username: String,
+    /// Password.
+    pub password: String,
+    /// Windows domain (optional).
+    pub domain: Option<String>,
+}
+
 // --------------- Server Builders ---------------
 
+/// Macro to apply TLS or Hybrid security and return the builder at the
+/// `WantsHandler` stage. We use a macro because the intermediate builder
+/// types (`WantsSecurity`, `WantsHandler`) are not re-exported by
+/// `ironrdp-server`.
+macro_rules! with_security {
+    ($builder:expr, $tls:expr, $auth:expr) => {
+        if $auth.is_some() {
+            $builder.with_hybrid($tls.acceptor.clone(), $tls.public_key.clone())
+        } else {
+            $builder.with_tls($tls.acceptor.clone())
+        }
+    };
+}
+
 /// Build an RDP server with the static blue screen display (fallback).
-pub fn build_server(bind_addr: std::net::SocketAddr, tls_acceptor: TlsAcceptor) -> RdpServer {
-    RdpServer::builder()
-        .with_addr(bind_addr)
-        .with_tls(tls_acceptor)
+pub fn build_server(
+    bind_addr: std::net::SocketAddr,
+    tls: &TlsContext,
+    auth: Option<&AuthCredentials>,
+) -> RdpServer {
+    let builder = RdpServer::builder().with_addr(bind_addr);
+    let builder = with_security!(builder, tls, auth);
+    let mut server = builder
         .with_input_handler(StaticInputHandler)
         .with_display_handler(StaticDisplay::default())
-        .build()
+        .build();
+    apply_credentials(&mut server, auth);
+    server
 }
 
 /// Build an RDP server with live screen capture and input injection.
 pub fn build_live_server(
     bind_addr: std::net::SocketAddr,
-    tls_acceptor: TlsAcceptor,
+    tls: &TlsContext,
+    auth: Option<&AuthCredentials>,
     display: LiveDisplay,
     input_handler: LiveInputHandler,
 ) -> RdpServer {
-    RdpServer::builder()
-        .with_addr(bind_addr)
-        .with_tls(tls_acceptor)
+    let builder = RdpServer::builder().with_addr(bind_addr);
+    let builder = with_security!(builder, tls, auth);
+    let mut server = builder
         .with_input_handler(input_handler)
         .with_display_handler(display)
-        .build()
+        .build();
+    apply_credentials(&mut server, auth);
+    server
 }
 
 /// Build an RDP server with live capture but no input injection (view-only).
 pub fn build_view_only_server(
     bind_addr: std::net::SocketAddr,
-    tls_acceptor: TlsAcceptor,
+    tls: &TlsContext,
+    auth: Option<&AuthCredentials>,
     display: LiveDisplay,
 ) -> RdpServer {
-    RdpServer::builder()
-        .with_addr(bind_addr)
-        .with_tls(tls_acceptor)
+    let builder = RdpServer::builder().with_addr(bind_addr);
+    let builder = with_security!(builder, tls, auth);
+    let mut server = builder
         .with_input_handler(StaticInputHandler)
         .with_display_handler(display)
-        .build()
+        .build();
+    apply_credentials(&mut server, auth);
+    server
+}
+
+/// Set NLA credentials on the server if auth is configured.
+fn apply_credentials(server: &mut RdpServer, auth: Option<&AuthCredentials>) {
+    if let Some(auth) = auth {
+        let creds = ironrdp_server::Credentials {
+            username: auth.username.clone(),
+            password: auth.password.clone(),
+            domain: auth.domain.clone(),
+        };
+        server.set_credentials(Some(creds));
+        tracing::info!(username = %auth.username, "NLA credentials configured");
+    }
 }

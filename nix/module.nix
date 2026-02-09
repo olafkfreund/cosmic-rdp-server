@@ -5,7 +5,39 @@ with lib;
 let
   cfg = config.services.cosmic-rdp-server;
   settingsFormat = pkgs.formats.toml { };
-  configFile = settingsFormat.generate "cosmic-rdp-server.toml" cfg.settings;
+
+  # Build the TOML config, merging auth settings only when enabled.
+  effectiveSettings = cfg.settings // optionalAttrs cfg.auth.enable {
+    auth = {
+      enable = true;
+      username = cfg.auth.username;
+      domain = cfg.auth.domain;
+      # Password is read from passwordFile at service start via
+      # LoadCredential, then injected with a wrapper script.
+    };
+  };
+
+  configFile = settingsFormat.generate "cosmic-rdp-server.toml" effectiveSettings;
+
+  # Wrapper script that injects the password from the credential file
+  # into the TOML config at runtime, then execs the server.
+  startScript = pkgs.writeShellScript "cosmic-rdp-server-start" ''
+    CONFIG="${configFile}"
+
+    if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -f "$CREDENTIALS_DIRECTORY/rdp-password" ]; then
+      RUNTIME_CONFIG="''${RUNTIME_DIRECTORY}/config.toml"
+      ${pkgs.coreutils}/bin/cp "$CONFIG" "$RUNTIME_CONFIG"
+      PASSWORD=$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/rdp-password")
+      ${pkgs.coreutils}/bin/cat >> "$RUNTIME_CONFIG" <<TOMLEOF
+
+[auth]
+password = "$PASSWORD"
+TOMLEOF
+      CONFIG="$RUNTIME_CONFIG"
+    fi
+
+    exec ${cfg.package}/bin/cosmic-rdp-server --config "$CONFIG"
+  '';
 in
 {
   options.services.cosmic-rdp-server = {
@@ -16,6 +48,35 @@ in
       example = literalExpression ''
         pkgs.cosmic-rdp-server.override { }
       '';
+    };
+
+    auth = {
+      enable = mkEnableOption "NLA (Network Level Authentication) via CredSSP";
+
+      username = mkOption {
+        type = types.str;
+        default = "";
+        description = "Username for NLA authentication.";
+      };
+
+      domain = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Windows domain for NLA authentication (optional).";
+      };
+
+      passwordFile = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        description = ''
+          Path to a file containing the NLA password.
+
+          The file should contain only the password (no trailing newline).
+          This is loaded via systemd LoadCredential so it never appears
+          in the Nix store. Compatible with agenix/sops-nix secrets.
+        '';
+        example = "/run/agenix/cosmic-rdp-password";
+      };
     };
 
     settings = mkOption {
@@ -37,6 +98,11 @@ in
                   default = 30;
                   description = "Target frames per second for screen capture.";
                 };
+                channel_capacity = mkOption {
+                  type = types.int;
+                  default = 4;
+                  description = "PipeWire channel capacity (number of buffered frames).";
+                };
               };
             };
             default = { };
@@ -57,6 +123,11 @@ in
                   default = "ultrafast";
                   description = "H.264 encoding preset.";
                 };
+                bitrate = mkOption {
+                  type = types.int;
+                  default = 10000000;
+                  description = "Target bitrate in bits per second.";
+                };
               };
             };
             default = { };
@@ -69,6 +140,7 @@ in
         Configuration for the COSMIC RDP Server.
 
         Settings are written to a TOML configuration file.
+        See the project README for all available options.
       '';
     };
 
@@ -80,6 +152,17 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.auth.enable -> cfg.auth.username != "";
+        message = "services.cosmic-rdp-server.auth.username must be set when auth is enabled.";
+      }
+      {
+        assertion = cfg.auth.enable -> cfg.auth.passwordFile != null;
+        message = "services.cosmic-rdp-server.auth.passwordFile must be set when auth is enabled.";
+      }
+    ];
+
     systemd.user.services.cosmic-rdp-server = {
       description = "COSMIC RDP Server";
       after = [ "graphical-session.target" ];
@@ -87,9 +170,14 @@ in
 
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${cfg.package}/bin/cosmic-rdp-server --config ${configFile}";
+        ExecStart = toString startScript;
         Restart = "on-failure";
         RestartSec = 5;
+        RuntimeDirectory = "cosmic-rdp-server";
+
+        # Load password from file without storing in Nix store
+        LoadCredential = optional (cfg.auth.enable && cfg.auth.passwordFile != null)
+          "rdp-password:${cfg.auth.passwordFile}";
 
         # Security hardening
         NoNewPrivileges = true;
@@ -98,7 +186,19 @@ in
         PrivateTmp = true;
         ProtectKernelTunables = true;
         ProtectControlGroups = true;
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
         RestrictSUIDSGID = true;
+        RestrictNamespaces = true;
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        RestrictRealtime = true;
+        SystemCallArchitectures = "native";
+        SystemCallFilter = [
+          "@system-service"
+          "~@privileged"
+          "~@resources"
+        ];
       };
     };
 
