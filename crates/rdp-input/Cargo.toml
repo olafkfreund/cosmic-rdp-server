@@ -1,0 +1,22 @@
+[package]
+name = "rdp-input"
+description = "Input injection abstraction for cosmic-rdp-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Input injection
+enigo.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Error handling
+thiserror.workspace = true

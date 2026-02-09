@@ -1,0 +1,21 @@
+[package]
+name = "rdp-encode"
+description = "Video encoding abstraction for cosmic-rdp-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Video encoding
+gstreamer.workspace = true
+gstreamer-app.workspace = true
+gstreamer-video.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Error handling
+thiserror.workspace = true
