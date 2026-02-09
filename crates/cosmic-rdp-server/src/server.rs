@@ -500,7 +500,11 @@ pub fn build_view_only_server(
     server
 }
 
-/// Set NLA credentials on the server if auth is configured.
+/// Set credentials on the server.
+///
+/// ironrdp-acceptor always validates `ClientInfoPdu` credentials, even in
+/// TLS-only mode.  When NLA auth is disabled we set empty credentials so
+/// that clients connecting with an empty username/password are accepted.
 fn apply_credentials(server: &mut RdpServer, auth: Option<&AuthCredentials>) {
     if let Some(auth) = auth {
         let creds = ironrdp_server::Credentials {
@@ -510,5 +514,16 @@ fn apply_credentials(server: &mut RdpServer, auth: Option<&AuthCredentials>) {
         };
         server.set_credentials(Some(creds));
         tracing::info!(username = %auth.username, "NLA credentials configured");
+    } else {
+        // ironrdp-acceptor rejects connections when server credentials are
+        // None because `None != Some(client_creds)`.  Set empty credentials
+        // so unauthenticated clients can connect with empty user/password.
+        let creds = ironrdp_server::Credentials {
+            username: String::new(),
+            password: String::new(),
+            domain: None,
+        };
+        server.set_credentials(Some(creds));
+        tracing::info!("No auth configured; accepting empty credentials");
     }
 }
