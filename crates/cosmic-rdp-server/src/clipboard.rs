@@ -270,7 +270,7 @@ mod tests {
         // "Hello" in UTF-16LE + null terminator
         let data: Vec<u8> = "Hello"
             .encode_utf16()
-            .flat_map(|c| c.to_le_bytes())
+            .flat_map(u16::to_le_bytes)
             .chain([0, 0])
             .collect();
         assert_eq!(decode_utf16le_text(&data), Some("Hello".to_string()));

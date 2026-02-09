@@ -361,6 +361,7 @@ mod tests {
             width: 2,
             height: 2,
             format: PixelFormat::Bgra,
+            #[allow(clippy::cast_possible_truncation)]
             stride: (2 * bpp) as u32,
             sequence: 0,
             damage: None,
@@ -369,7 +370,7 @@ mod tests {
         blit_frame(&mut canvas, canvas_stride, &frame, 1, 1, canvas_w, canvas_h);
 
         // Check that pixel (1,1) is filled.
-        let offset = 1 * canvas_stride + 1 * bpp;
+        let offset = canvas_stride + bpp;
         assert_eq!(canvas[offset], 0xFF);
 
         // Check that pixel (0,0) is still zero.

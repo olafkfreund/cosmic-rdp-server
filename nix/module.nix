@@ -50,6 +50,19 @@ in
       '';
     };
 
+    installSettings = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Whether to install the COSMIC RDP Settings GUI application.";
+    };
+
+    settingsPackage = mkPackageOption pkgs "cosmic-rdp-settings" {
+      default = [ "cosmic-rdp-settings" ];
+      example = literalExpression ''
+        pkgs.cosmic-rdp-settings
+      '';
+    };
+
     auth = {
       enable = mkEnableOption "NLA (Network Level Authentication) via CredSSP";
 
@@ -182,6 +195,8 @@ in
   };
 
   config = mkIf cfg.enable {
+    environment.systemPackages = mkIf cfg.installSettings [ cfg.settingsPackage ];
+
     assertions = [
       {
         assertion = cfg.auth.enable -> cfg.auth.username != "";

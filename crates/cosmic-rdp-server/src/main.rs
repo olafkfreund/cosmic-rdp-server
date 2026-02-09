@@ -5,6 +5,7 @@ use clap::Parser;
 
 mod clipboard;
 mod config;
+mod dbus;
 mod server;
 mod sound;
 mod tls;
@@ -53,46 +54,74 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let cfg = load_and_merge_config(&cli)?;
+    let mut cfg = load_and_merge_config(&cli)?;
 
-    let tls_ctx = setup_tls(&cfg)?;
-    let auth = setup_auth(&cfg)?;
+    // Start D-Bus server for IPC with the settings UI.
+    let dbus_state = rdp_dbus::server::RdpServerState::new(cfg.bind.to_string());
+    let (_dbus_conn, mut dbus_cmd_rx) =
+        dbus::start_dbus_server(dbus_state.clone()).await?;
 
-    let make_cliprdr = || -> Option<Box<dyn ironrdp_server::CliprdrServerFactory>> {
-        if cfg.clipboard.enable {
-            tracing::info!("Clipboard sharing enabled");
-            Some(Box::new(clipboard::LocalClipboardFactory::new()))
-        } else {
-            None
-        }
-    };
+    loop {
+        let tls_ctx = setup_tls(&cfg)?;
+        let auth = setup_auth(&cfg)?;
 
-    let make_sound = || -> Option<Box<dyn ironrdp_server::SoundServerFactory>> {
-        if cfg.audio.enable {
-            tracing::info!(
-                channels = cfg.audio.channels,
-                sample_rate = cfg.audio.sample_rate,
-                "Audio forwarding enabled (RDPSND)"
+        let make_cliprdr = || -> Option<Box<dyn ironrdp_server::CliprdrServerFactory>> {
+            if cfg.clipboard.enable {
+                tracing::info!("Clipboard sharing enabled");
+                Some(Box::new(clipboard::LocalClipboardFactory::new()))
+            } else {
+                None
+            }
+        };
+
+        let make_sound = || -> Option<Box<dyn ironrdp_server::SoundServerFactory>> {
+            if cfg.audio.enable {
+                tracing::info!(
+                    channels = cfg.audio.channels,
+                    sample_rate = cfg.audio.sample_rate,
+                    "Audio forwarding enabled (RDPSND)"
+                );
+                Some(Box::new(sound::PipeWireAudioFactory::new(
+                    cfg.audio.channels,
+                    cfg.audio.sample_rate,
+                )))
+            } else {
+                None
+            }
+        };
+
+        tracing::info!(bind = %cfg.bind, "Starting cosmic-rdp-server");
+        dbus_state.set_running().await;
+
+        let result = if cfg.static_display {
+            tracing::info!("Using static blue screen display");
+            let rdp_server = server::build_server(
+                cfg.bind, &tls_ctx, auth.as_ref(), make_cliprdr(), make_sound(),
             );
-            Some(Box::new(sound::PipeWireAudioFactory::new(
-                cfg.audio.channels,
-                cfg.audio.sample_rate,
-            )))
+            run_with_shutdown(rdp_server, &mut dbus_cmd_rx).await
         } else {
-            None
+            run_live_or_fallback(
+                &cfg, &tls_ctx, auth.as_ref(), &make_cliprdr, &make_sound, &mut dbus_cmd_rx,
+            )
+            .await
+        };
+
+        match result {
+            Ok(ShutdownReason::Reload) => {
+                tracing::info!("Reloading configuration");
+                cfg = load_and_merge_config(&cli)?;
+            }
+            Ok(ShutdownReason::Stop | ShutdownReason::Signal) => {
+                dbus_state.set_stopped().await;
+                tracing::info!("Server stopped");
+                return Ok(());
+            }
+            Err(e) => {
+                dbus_state.set_error().await;
+                return Err(e);
+            }
         }
-    };
-
-    tracing::info!(bind = %cfg.bind, "Starting cosmic-rdp-server");
-
-    if cfg.static_display {
-        tracing::info!("Using static blue screen display");
-        let rdp_server =
-            server::build_server(cfg.bind, &tls_ctx, auth.as_ref(), make_cliprdr(), make_sound());
-        return run_with_shutdown(rdp_server).await;
     }
-
-    run_live_or_fallback(&cfg, &tls_ctx, auth.as_ref(), &make_cliprdr, &make_sound).await
 }
 
 /// Load config from file and apply CLI overrides.
@@ -151,6 +180,16 @@ fn setup_auth(cfg: &config::ServerConfig) -> Result<Option<server::AuthCredentia
     }))
 }
 
+/// Reason the server shut down.
+enum ShutdownReason {
+    /// Unix signal received.
+    Signal,
+    /// D-Bus `Reload` command.
+    Reload,
+    /// D-Bus `Stop` command.
+    Stop,
+}
+
 /// Try live capture, fall back to static blue screen on failure.
 async fn run_live_or_fallback(
     cfg: &config::ServerConfig,
@@ -158,7 +197,8 @@ async fn run_live_or_fallback(
     auth: Option<&server::AuthCredentials>,
     make_cliprdr: &dyn Fn() -> Option<Box<dyn ironrdp_server::CliprdrServerFactory>>,
     make_sound: &dyn Fn() -> Option<Box<dyn ironrdp_server::SoundServerFactory>>,
-) -> Result<()> {
+    dbus_cmd_rx: &mut tokio::sync::mpsc::Receiver<rdp_dbus::server::DaemonCommand>,
+) -> Result<ShutdownReason> {
     match rdp_capture::start_capture(None, cfg.capture.channel_capacity).await {
         Ok((capture_handle, event_rx, desktop_info)) => {
             tracing::info!(
@@ -182,7 +222,7 @@ async fn run_live_or_fallback(
                         cfg.bind, tls_ctx, auth, live_display, make_cliprdr(), make_sound(),
                     );
                     let _capture = capture_handle;
-                    return run_with_shutdown(rdp_server).await;
+                    return run_with_shutdown(rdp_server, dbus_cmd_rx).await;
                 }
             };
 
@@ -190,20 +230,24 @@ async fn run_live_or_fallback(
                 cfg.bind, tls_ctx, auth, live_display, input_handler, make_cliprdr(), make_sound(),
             );
             let _capture = capture_handle;
-            run_with_shutdown(rdp_server).await
+            run_with_shutdown(rdp_server, dbus_cmd_rx).await
         }
         Err(e) => {
             tracing::warn!("Failed to start screen capture: {e:#}");
             tracing::info!("Falling back to static blue screen display");
             let rdp_server =
                 server::build_server(cfg.bind, tls_ctx, auth, make_cliprdr(), make_sound());
-            run_with_shutdown(rdp_server).await
+            run_with_shutdown(rdp_server, dbus_cmd_rx).await
         }
     }
 }
 
-/// Run the RDP server with graceful shutdown on `SIGINT` / `SIGTERM`.
-async fn run_with_shutdown(mut server: ironrdp_server::RdpServer) -> Result<()> {
+/// Run the RDP server with graceful shutdown on `SIGINT` / `SIGTERM` or
+/// D-Bus commands.
+async fn run_with_shutdown(
+    mut server: ironrdp_server::RdpServer,
+    dbus_cmd_rx: &mut tokio::sync::mpsc::Receiver<rdp_dbus::server::DaemonCommand>,
+) -> Result<ShutdownReason> {
     let mut sigterm =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
             .context("failed to register SIGTERM handler")?;
@@ -211,16 +255,28 @@ async fn run_with_shutdown(mut server: ironrdp_server::RdpServer) -> Result<()> 
     tokio::select! {
         result = server.run() => {
             result.context("RDP server error")?;
+            Ok(ShutdownReason::Stop)
         }
         result = tokio::signal::ctrl_c() => {
             result.context("failed to listen for SIGINT")?;
             tracing::info!("Received SIGINT, shutting down");
+            Ok(ShutdownReason::Signal)
         }
         _ = sigterm.recv() => {
             tracing::info!("Received SIGTERM, shutting down");
+            Ok(ShutdownReason::Signal)
+        }
+        cmd = dbus_cmd_rx.recv() => {
+            match cmd {
+                Some(rdp_dbus::server::DaemonCommand::Reload) => {
+                    tracing::info!("D-Bus: reload requested");
+                    Ok(ShutdownReason::Reload)
+                }
+                Some(rdp_dbus::server::DaemonCommand::Stop) | None => {
+                    tracing::info!("D-Bus: stop requested");
+                    Ok(ShutdownReason::Stop)
+                }
+            }
         }
     }
-
-    tracing::info!("Server stopped");
-    Ok(())
 }

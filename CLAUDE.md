@@ -6,11 +6,13 @@ RDP server for the COSMIC Desktop Environment. Allows remote desktop access usin
 
 ## Architecture
 
-Standalone daemon (direct Wayland client) with 4 crates:
+Standalone daemon (direct Wayland client) with 6 crates:
 
 | Crate | Purpose |
 |-------|---------|
-| `cosmic-rdp-server` | Main binary: CLI, config, TLS, server orchestration |
+| `cosmic-rdp-server` | Main binary: CLI, config, TLS, D-Bus server, orchestration |
+| `cosmic-rdp-settings` | COSMIC settings GUI: config editor, D-Bus status, nav pages |
+| `rdp-dbus` | Shared D-Bus types, config structs, client proxy |
 | `rdp-capture` | Screen capture via ScreenCast portal + PipeWire |
 | `rdp-input` | Input injection via enigo/libei |
 | `rdp-encode` | Video encoding via GStreamer (H.264) + bitmap fallback |
@@ -21,13 +23,19 @@ Standalone daemon (direct Wayland client) with 4 crates:
 just                    # Build release (default)
 just build-debug        # Debug build
 just build-release      # Release build
+just build-settings-debug   # Build settings GUI (debug)
+just build-settings-release # Build settings GUI (release)
 just check              # Clippy with pedantic warnings
-just run                # Run with RUST_BACKTRACE=full
+just run                # Run server with RUST_BACKTRACE=full
+just run-settings       # Run settings GUI
 just test               # Run tests
 just clean              # Clean build artifacts
-sudo just install       # Install to system
+sudo just install       # Install server to system
+sudo just install-settings  # Install settings GUI to system
+sudo just install-all   # Install everything
 nix develop             # Enter dev shell with all dependencies
-nix build               # Build with Nix
+nix build               # Build server with Nix
+nix build .#cosmic-rdp-settings  # Build settings GUI with Nix
 ```
 
 ## Key Dependencies
@@ -41,6 +49,8 @@ nix build               # Build with Nix
 - **enigo** 0.6 (libei_tokio): Input injection via libei
 - **arboard** 3: System clipboard access (Wayland + X11)
 - **tokio-rustls** + **rcgen**: TLS + self-signed certificates
+- **zbus** 5: D-Bus IPC between daemon and settings GUI
+- **libcosmic** (git): COSMIC Desktop application framework (settings GUI)
 
 ## Code Style
 
@@ -68,3 +78,4 @@ Patterns adapted from `cosmic-display-stream`:
 - **Phase 5**: Config, auth, NixOS module (DONE - TOML config, NLA/CredSSP, NixOS module)
 - **Phase 6**: Clipboard, dynamic resize, graceful shutdown (DONE - CLIPRDR text, display resize, SIGINT/SIGTERM)
 - **Phase 7**: Audio forwarding, multi-monitor, cursor shape (DONE - RDPSND via PipeWire, compositor, cursor metadata)
+- **Phase 8**: COSMIC Settings UI (DONE - settings GUI, D-Bus IPC, config editor, NixOS module update)

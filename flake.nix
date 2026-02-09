@@ -29,6 +29,17 @@
           libei
         ];
 
+        # Additional runtime deps for the settings GUI (libcosmic).
+        guiRuntimeDeps = with pkgs; [
+          expat
+          fontconfig
+          freetype
+          libGL
+          mesa
+          vulkan-loader
+          dbus
+        ];
+
         buildDeps = with pkgs; [
           pkg-config
           just
@@ -44,6 +55,16 @@
           libei
           openssl
           clang
+        ];
+
+        guiNativeBuildDeps = with pkgs; [
+          expat
+          fontconfig
+          freetype
+          libGL
+          mesa
+          vulkan-loader
+          dbus
         ];
 
         pkgDef = {
@@ -71,6 +92,17 @@
         cosmic-rdp-server = craneLib.buildPackage (pkgDef // {
           inherit cargoArtifacts;
         });
+
+        settingsPkgDef = pkgDef // {
+          buildInputs = nativeBuildDeps ++ guiNativeBuildDeps;
+        };
+
+        settingsCargoArtifacts = craneLib.buildDepsOnly settingsPkgDef;
+
+        cosmic-rdp-settings = craneLib.buildPackage (settingsPkgDef // {
+          cargoArtifacts = settingsCargoArtifacts;
+          cargoExtraArgs = "--package cosmic-rdp-settings";
+        });
       in
       {
         checks = {
@@ -87,21 +119,36 @@
             '';
           });
           cosmic-rdp-server = self.packages.${system}.default;
+
+          cosmic-rdp-settings = cosmic-rdp-settings.overrideAttrs (oldAttrs: {
+            buildPhase = ''
+              just prefix=$out build-settings-release
+            '';
+            installPhase = ''
+              just prefix=$out install-settings
+            '';
+          });
         };
 
-        apps.default = flake-utils.lib.mkApp {
-          drv = self.packages.${system}.default;
+        apps = {
+          default = flake-utils.lib.mkApp {
+            drv = self.packages.${system}.default;
+          };
+          cosmic-rdp-settings = flake-utils.lib.mkApp {
+            drv = self.packages.${system}.cosmic-rdp-settings;
+          };
         };
 
         devShells.default = pkgs.mkShell {
-          packages = buildDeps ++ nativeBuildDeps ++ runtimeDeps ++ (with pkgs; [
+          packages = buildDeps ++ nativeBuildDeps ++ guiNativeBuildDeps
+            ++ runtimeDeps ++ guiRuntimeDeps ++ (with pkgs; [
             rust-analyzer
             clippy
             rustfmt
             cargo-watch
           ]);
 
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath runtimeDeps;
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (runtimeDeps ++ guiRuntimeDeps);
 
           shellHook = ''
             echo "cosmic-rdp-server development environment"
@@ -120,6 +167,7 @@
 
       overlays.default = final: prev: {
         cosmic-rdp-server = self.packages.${prev.system}.default;
+        cosmic-rdp-settings = self.packages.${prev.system}.cosmic-rdp-settings;
       };
     };
 }

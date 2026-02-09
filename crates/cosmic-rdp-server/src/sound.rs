@@ -197,6 +197,6 @@ mod tests {
         assert_eq!(formats[0].n_samples_per_sec, 44100);
         assert_eq!(formats[0].bits_per_sample, 16);
         assert_eq!(formats[0].n_block_align, 4); // 2 channels * 2 bytes
-        assert_eq!(formats[0].n_avg_bytes_per_sec, 176400); // 44100 * 4
+        assert_eq!(formats[0].n_avg_bytes_per_sec, 176_400); // 44100 * 4
     }
 }

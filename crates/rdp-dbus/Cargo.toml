@@ -1,0 +1,14 @@
+[package]
+name = "rdp-dbus"
+description = "Shared D-Bus types and config structs for cosmic-rdp-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+zbus = { workspace = true, default-features = false }

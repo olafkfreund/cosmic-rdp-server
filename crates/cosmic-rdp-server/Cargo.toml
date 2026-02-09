@@ -17,6 +17,7 @@ path = "src/main.rs"
 rdp-capture.workspace = true
 rdp-input.workspace = true
 rdp-encode.workspace = true
+rdp-dbus.workspace = true
 
 # Input injection
 enigo.workspace = true
@@ -55,6 +56,9 @@ toml.workspace = true
 # Logging
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+# D-Bus
+zbus.workspace = true
 
 # Error handling
 thiserror.workspace = true

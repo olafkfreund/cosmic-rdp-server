@@ -2,10 +2,15 @@
 resolver = "2"
 members = [
   "crates/cosmic-rdp-server",
+  "crates/cosmic-rdp-settings",
   "crates/rdp-capture",
   "crates/rdp-input",
   "crates/rdp-encode",
+  "crates/rdp-dbus",
 ]
+
+[workspace.metadata.crane]
+name = "cosmic-rdp-server"
 
 [workspace.package]
 version = "0.1.0"
@@ -67,7 +72,14 @@ rustls-pemfile = "2"
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+# D-Bus
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+# Utilities
+dirs = "6"
+
 # Internal crates
 rdp-capture = { path = "crates/rdp-capture" }
 rdp-input = { path = "crates/rdp-input" }
 rdp-encode = { path = "crates/rdp-encode" }
+rdp-dbus = { path = "crates/rdp-dbus" }
