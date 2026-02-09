@@ -641,6 +641,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "clap",
+ "enigo",
  "ironrdp-server",
  "rcgen",
  "rdp-capture",

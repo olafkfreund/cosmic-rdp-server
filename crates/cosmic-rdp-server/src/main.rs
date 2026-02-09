@@ -85,8 +85,28 @@ async fn main() -> Result<()> {
             );
 
             let live_display = server::LiveDisplay::new(frame_rx, &desktop_info);
+
+            // Try to set up input injection via libei
+            let input_handler = match rdp_input::EnigoInput::new() {
+                Ok(enigo) => {
+                    tracing::info!("Input injection active (libei)");
+                    server::LiveInputHandler::new(enigo)
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize input injection: {e}");
+                    tracing::warn!("Input events will be logged but not injected");
+                    // Fall back to static display mode since we can't inject input
+                    // but still show the live desktop (view-only)
+                    let mut rdp_server =
+                        server::build_view_only_server(bind_addr, tls_acceptor, live_display);
+                    let _capture = capture_handle;
+                    rdp_server.run().await.context("RDP server error")?;
+                    return Ok(());
+                }
+            };
+
             let mut rdp_server =
-                server::build_live_server(bind_addr, tls_acceptor, live_display);
+                server::build_live_server(bind_addr, tls_acceptor, live_display, input_handler);
 
             // Keep capture handle alive for the duration of the server
             let _capture = capture_handle;

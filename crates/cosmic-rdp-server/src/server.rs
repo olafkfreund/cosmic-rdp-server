@@ -6,7 +6,9 @@ use ironrdp_server::{
     BitmapUpdate, DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent, PixelFormat, RdpServer,
     RdpServerDisplay, RdpServerDisplayUpdates, RdpServerInputHandler,
 };
+use enigo::{Button, Direction};
 use rdp_capture::{CapturedFrame, DesktopInfo};
+use rdp_input::EnigoInput;
 use tokio::sync::mpsc;
 use tokio_rustls::TlsAcceptor;
 
@@ -26,6 +28,97 @@ impl RdpServerInputHandler for StaticInputHandler {
 
     fn mouse(&mut self, event: MouseEvent) {
         tracing::trace!(?event, "Mouse event received");
+    }
+}
+
+// --------------- Live Input (Phase 3 input injection) ---------------
+
+/// Input handler that injects keyboard and mouse events into the compositor.
+///
+/// Wraps an [`EnigoInput`] backend and maps all RDP events to
+/// the appropriate enigo/libei calls.
+pub struct LiveInputHandler {
+    input: EnigoInput,
+}
+
+impl LiveInputHandler {
+    /// Create a new live input handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input backend cannot connect to the compositor.
+    pub fn new(input: EnigoInput) -> Self {
+        Self { input }
+    }
+}
+
+impl RdpServerInputHandler for LiveInputHandler {
+    fn keyboard(&mut self, event: KeyboardEvent) {
+        match event {
+            KeyboardEvent::Pressed { code, extended } => {
+                self.input.key_press(code, extended);
+            }
+            KeyboardEvent::Released { code, extended } => {
+                self.input.key_release(code, extended);
+            }
+            KeyboardEvent::UnicodePressed(_) | KeyboardEvent::UnicodeReleased(_) => {
+                // Unicode key events are not yet supported.
+                // These require XKB compose / text input protocol integration.
+                tracing::debug!(?event, "Unicode key event ignored (not yet supported)");
+            }
+            KeyboardEvent::Synchronize(_flags) => {
+                // Lock key sync (Caps Lock, Num Lock, Scroll Lock).
+                // TODO: Read current LED state and toggle to match.
+                tracing::debug!(?event, "Key synchronize event ignored (not yet supported)");
+            }
+        }
+    }
+
+    fn mouse(&mut self, event: MouseEvent) {
+        match event {
+            MouseEvent::Move { x, y } => {
+                self.input.mouse_move(x, y);
+            }
+            MouseEvent::RelMove { x, y } => {
+                self.input.mouse_rel_move(x, y);
+            }
+            MouseEvent::LeftPressed => {
+                self.input.mouse_button(Button::Left, Direction::Press);
+            }
+            MouseEvent::LeftReleased => {
+                self.input.mouse_button(Button::Left, Direction::Release);
+            }
+            MouseEvent::RightPressed => {
+                self.input.mouse_button(Button::Right, Direction::Press);
+            }
+            MouseEvent::RightReleased => {
+                self.input.mouse_button(Button::Right, Direction::Release);
+            }
+            MouseEvent::MiddlePressed => {
+                self.input.mouse_button(Button::Middle, Direction::Press);
+            }
+            MouseEvent::MiddleReleased => {
+                self.input.mouse_button(Button::Middle, Direction::Release);
+            }
+            MouseEvent::Button4Pressed => {
+                self.input.mouse_button(Button::Back, Direction::Press);
+            }
+            MouseEvent::Button4Released => {
+                self.input.mouse_button(Button::Back, Direction::Release);
+            }
+            MouseEvent::Button5Pressed => {
+                self.input.mouse_button(Button::Forward, Direction::Press);
+            }
+            MouseEvent::Button5Released => {
+                self.input.mouse_button(Button::Forward, Direction::Release);
+            }
+            MouseEvent::VerticalScroll { value } => {
+                self.input.scroll_vertical(i32::from(value));
+            }
+            MouseEvent::Scroll { x, y } => {
+                self.input.scroll(x, y);
+            }
+        }
     }
 }
 
@@ -217,8 +310,23 @@ pub fn build_server(bind_addr: std::net::SocketAddr, tls_acceptor: TlsAcceptor) 
         .build()
 }
 
-/// Build an RDP server with live screen capture display.
+/// Build an RDP server with live screen capture and input injection.
 pub fn build_live_server(
+    bind_addr: std::net::SocketAddr,
+    tls_acceptor: TlsAcceptor,
+    display: LiveDisplay,
+    input_handler: LiveInputHandler,
+) -> RdpServer {
+    RdpServer::builder()
+        .with_addr(bind_addr)
+        .with_tls(tls_acceptor)
+        .with_input_handler(input_handler)
+        .with_display_handler(display)
+        .build()
+}
+
+/// Build an RDP server with live capture but no input injection (view-only).
+pub fn build_view_only_server(
     bind_addr: std::net::SocketAddr,
     tls_acceptor: TlsAcceptor,
     display: LiveDisplay,

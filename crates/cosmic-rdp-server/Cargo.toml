@@ -18,6 +18,9 @@ rdp-capture.workspace = true
 rdp-input.workspace = true
 rdp-encode.workspace = true
 
+# Input injection
+enigo.workspace = true
+
 # RDP protocol
 ironrdp-server.workspace = true
 
