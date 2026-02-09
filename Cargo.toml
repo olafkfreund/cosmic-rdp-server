@@ -33,6 +33,9 @@ toml = "0.8"
 
 # RDP protocol
 ironrdp-server = { version = "0.10", features = ["helper"] }
+ironrdp-cliprdr = "0.5"
+ironrdp-core = "0.1"
+ironrdp-displaycontrol = "0.5"
 
 # Async utilities
 async-trait = "0.1"
@@ -46,6 +49,9 @@ pipewire = "0.8"
 gstreamer = "0.23"
 gstreamer-app = "0.23"
 gstreamer-video = "0.23"
+
+# Clipboard
+arboard = "3"
 
 # Input injection
 enigo = { version = "0.6", features = ["libei_tokio"] }

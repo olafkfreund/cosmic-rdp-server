@@ -1,0 +1,58 @@
+# cosmic-rdp-server configuration
+#
+# Copy this file to a location of your choice and pass it via:
+#   cosmic-rdp-server --config /path/to/config.toml
+#
+# All values shown below are the defaults. Uncomment and modify as needed.
+
+# Network address and port to listen on.
+# bind = "0.0.0.0:3389"
+
+# Path to a PEM-encoded TLS certificate.
+# If not set, a self-signed certificate is generated on each start.
+# cert_path = "/etc/cosmic-rdp-server/cert.pem"
+
+# Path to the corresponding PEM-encoded private key.
+# Required if cert_path is set.
+# key_path = "/etc/cosmic-rdp-server/key.pem"
+
+# Use a static blue screen instead of live capture (for testing).
+# static_display = false
+
+# --- Authentication ---
+# When enabled, clients must authenticate via NLA/CredSSP before
+# seeing the desktop.
+[auth]
+# enable = false
+# username = ""
+# password = ""
+# domain = ""      # Optional Windows domain
+
+# --- Screen Capture ---
+[capture]
+# Target frames per second (used for PipeWire stream negotiation).
+# fps = 30
+
+# Number of frames buffered in the PipeWire channel.
+# Higher values add latency but reduce dropped frames.
+# channel_capacity = 4
+
+# --- Video Encoding ---
+# Note: H.264/EGFX delivery is prepared but blocked on upstream
+# ironrdp-server support. These settings will apply once EGFX lands.
+[encode]
+# Preferred encoder: "vaapi", "nvenc", "software", or "auto".
+# "auto" tries hardware encoders first, then falls back to software.
+# encoder = "auto"
+
+# H.264 encoding preset (x264-specific: "ultrafast", "superfast", etc.).
+# preset = "ultrafast"
+
+# Target bitrate in bits per second.
+# bitrate = 10000000
+
+# --- Clipboard ---
+# Share clipboard content between the local desktop and the remote
+# RDP client. Only plain text is supported.
+[clipboard]
+# enable = true

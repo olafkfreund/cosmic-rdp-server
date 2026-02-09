@@ -2,9 +2,10 @@ use std::num::{NonZeroU16, NonZeroUsize};
 
 use anyhow::Result;
 use bytes::Bytes;
+use ironrdp_displaycontrol::pdu::DisplayControlMonitorLayout;
 use ironrdp_server::{
-    BitmapUpdate, DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent, PixelFormat, RdpServer,
-    RdpServerDisplay, RdpServerDisplayUpdates, RdpServerInputHandler,
+    BitmapUpdate, CliprdrServerFactory, DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent,
+    PixelFormat, RdpServer, RdpServerDisplay, RdpServerDisplayUpdates, RdpServerInputHandler,
 };
 use enigo::{Button, Direction};
 use rdp_capture::{CapturedFrame, DesktopInfo};
@@ -210,13 +211,20 @@ fn create_blue_bitmap(width: u16, height: u16) -> BitmapUpdate {
     }
 }
 
-// --------------- Live Display (Phase 2 screen capture) ---------------
+// --------------- Live Display (Phase 2 screen capture + Phase 6 resize) -----
 
-/// Display that streams live screen capture frames via `PipeWire`.
+/// Display that streams live screen capture frames via `PipeWire` and
+/// supports dynamic resize requests from the RDP client.
 pub struct LiveDisplay {
     width: u16,
     height: u16,
     frame_rx: Option<mpsc::Receiver<CapturedFrame>>,
+    /// Sender half of the resize channel. When the RDP client requests a
+    /// layout change, we send the new size here; the `LiveDisplayUpdates`
+    /// picks it up and emits `DisplayUpdate::Resize`.
+    resize_tx: mpsc::Sender<DesktopSize>,
+    /// Receiver passed to `LiveDisplayUpdates` on first call to `updates()`.
+    resize_rx: Option<mpsc::Receiver<DesktopSize>>,
 }
 
 impl LiveDisplay {
@@ -225,10 +233,13 @@ impl LiveDisplay {
     /// The caller must keep the [`rdp_capture::CaptureHandle`] alive for the
     /// duration of the display, otherwise frames will stop arriving.
     pub fn new(frame_rx: mpsc::Receiver<CapturedFrame>, info: &DesktopInfo) -> Self {
+        let (resize_tx, resize_rx) = mpsc::channel(4);
         Self {
             width: info.width,
             height: info.height,
             frame_rx: Some(frame_rx),
+            resize_tx,
+            resize_rx: Some(resize_rx),
         }
     }
 }
@@ -248,29 +259,81 @@ impl RdpServerDisplay for LiveDisplay {
             .take()
             .ok_or_else(|| anyhow::anyhow!("capture already started (only one connection supported)"))?;
 
-        Ok(Box::new(LiveDisplayUpdates { frame_rx }))
+        let resize_rx = self
+            .resize_rx
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("resize channel already taken"))?;
+
+        Ok(Box::new(LiveDisplayUpdates {
+            frame_rx,
+            resize_rx,
+        }))
+    }
+
+    fn request_layout(&mut self, layout: DisplayControlMonitorLayout) {
+        // Extract the primary monitor dimensions from the layout request.
+        let Some(primary) = layout.monitors().iter().find(|m| m.is_primary()) else {
+            tracing::debug!("No primary monitor in layout request, ignoring");
+            return;
+        };
+
+        let (width, height) = primary.dimensions();
+        let Ok(width) = u16::try_from(width) else {
+            tracing::warn!(width, "Requested width exceeds u16, ignoring resize");
+            return;
+        };
+        let Ok(height) = u16::try_from(height) else {
+            tracing::warn!(height, "Requested height exceeds u16, ignoring resize");
+            return;
+        };
+
+        tracing::info!(width, height, "Client requested display resize");
+
+        let new_size = DesktopSize { width, height };
+        if let Err(e) = self.resize_tx.try_send(new_size) {
+            tracing::warn!("Failed to send resize request: {e}");
+        }
     }
 }
 
-/// Display updates that receive live frames from the `PipeWire` capture.
+/// Display updates that receive live frames from the `PipeWire` capture
+/// and handle dynamic resize events from the RDP client.
 struct LiveDisplayUpdates {
     frame_rx: mpsc::Receiver<CapturedFrame>,
+    resize_rx: mpsc::Receiver<DesktopSize>,
 }
 
 #[async_trait::async_trait]
 impl RdpServerDisplayUpdates for LiveDisplayUpdates {
     async fn next_update(&mut self) -> Result<Option<DisplayUpdate>> {
-        // Cancellation-safe: mpsc::Receiver::recv() is cancel-safe
-        let Some(mut frame) = self.frame_rx.recv().await else {
-            return Ok(None);
-        };
+        // Both branches are cancellation-safe (mpsc::Receiver::recv)
+        tokio::select! {
+            frame = self.frame_rx.recv() => {
+                let Some(mut frame) = frame else {
+                    return Ok(None);
+                };
 
-        // PipeWire delivers BGRx where the alpha byte is undefined.
-        // Set alpha to 0xFF for correct rendering.
-        frame.ensure_alpha_opaque();
+                // PipeWire delivers BGRx where the alpha byte is undefined.
+                // Set alpha to 0xFF for correct rendering.
+                frame.ensure_alpha_opaque();
 
-        let bitmap = frame_to_bitmap(frame)?;
-        Ok(Some(DisplayUpdate::Bitmap(bitmap)))
+                let bitmap = frame_to_bitmap(frame)?;
+                Ok(Some(DisplayUpdate::Bitmap(bitmap)))
+            }
+            size = self.resize_rx.recv() => {
+                let Some(new_size) = size else {
+                    // Resize channel closed - continue with frames only.
+                    // This shouldn't normally happen.
+                    return Ok(None);
+                };
+                tracing::info!(
+                    width = new_size.width,
+                    height = new_size.height,
+                    "Emitting display resize"
+                );
+                Ok(Some(DisplayUpdate::Resize(new_size)))
+            }
+        }
     }
 }
 
@@ -332,12 +395,14 @@ pub fn build_server(
     bind_addr: std::net::SocketAddr,
     tls: &TlsContext,
     auth: Option<&AuthCredentials>,
+    cliprdr: Option<Box<dyn CliprdrServerFactory>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
     let mut server = builder
         .with_input_handler(StaticInputHandler)
         .with_display_handler(StaticDisplay::default())
+        .with_cliprdr_factory(cliprdr)
         .build();
     apply_credentials(&mut server, auth);
     server
@@ -350,12 +415,14 @@ pub fn build_live_server(
     auth: Option<&AuthCredentials>,
     display: LiveDisplay,
     input_handler: LiveInputHandler,
+    cliprdr: Option<Box<dyn CliprdrServerFactory>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
     let mut server = builder
         .with_input_handler(input_handler)
         .with_display_handler(display)
+        .with_cliprdr_factory(cliprdr)
         .build();
     apply_credentials(&mut server, auth);
     server
@@ -367,12 +434,14 @@ pub fn build_view_only_server(
     tls: &TlsContext,
     auth: Option<&AuthCredentials>,
     display: LiveDisplay,
+    cliprdr: Option<Box<dyn CliprdrServerFactory>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
     let mut server = builder
         .with_input_handler(StaticInputHandler)
         .with_display_handler(display)
+        .with_cliprdr_factory(cliprdr)
         .build();
     apply_credentials(&mut server, auth);
     server

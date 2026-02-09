@@ -23,6 +23,12 @@ enigo.workspace = true
 
 # RDP protocol
 ironrdp-server.workspace = true
+ironrdp-cliprdr.workspace = true
+ironrdp-core.workspace = true
+ironrdp-displaycontrol.workspace = true
+
+# Clipboard
+arboard.workspace = true
 
 # Async utilities
 async-trait.workspace = true

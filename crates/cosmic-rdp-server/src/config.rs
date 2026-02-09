@@ -28,6 +28,9 @@ pub struct ServerConfig {
 
     /// Encoding settings.
     pub encode: EncodeConfig,
+
+    /// Clipboard settings.
+    pub clipboard: ClipboardConfig,
 }
 
 /// NLA authentication configuration.
@@ -60,6 +63,20 @@ pub struct CaptureConfig {
     pub channel_capacity: usize,
 }
 
+/// Clipboard sharing settings.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct ClipboardConfig {
+    /// Enable clipboard sharing between local and remote sessions.
+    pub enable: bool,
+}
+
+impl Default for ClipboardConfig {
+    fn default() -> Self {
+        Self { enable: true }
+    }
+}
+
 /// Video encoding settings.
 #[derive(Debug, Deserialize)]
 #[serde(default)]
@@ -84,6 +101,7 @@ impl Default for ServerConfig {
             auth: AuthConfig::default(),
             capture: CaptureConfig::default(),
             encode: EncodeConfig::default(),
+            clipboard: ClipboardConfig::default(),
         }
     }
 }
