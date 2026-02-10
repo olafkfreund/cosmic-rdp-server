@@ -1,4 +1,5 @@
 use std::num::{NonZeroU16, NonZeroUsize};
+use std::sync::Arc;
 
 use anyhow::Result;
 use bytes::Bytes;
@@ -230,18 +231,29 @@ fn create_blue_bitmap(width: u16, height: u16) -> BitmapUpdate {
 
 // --------------- Live Display (Phase 2 screen capture + Phase 6 resize) -----
 
+/// Shared channel state between [`LiveDisplay`] and [`LiveDisplayUpdates`].
+///
+/// When a client connects, the receivers are taken from here. When the client
+/// disconnects, [`LiveDisplayUpdates::drop`] puts them back so the next
+/// connection can reuse them without restarting capture.
+struct DisplayChannels {
+    event_rx: Option<mpsc::Receiver<CaptureEvent>>,
+    resize_rx: Option<mpsc::Receiver<DesktopSize>>,
+}
+
 /// Display that streams live screen capture frames via `PipeWire` and
 /// supports dynamic resize requests from the RDP client.
+///
+/// Supports sequential connections: when a client disconnects, the capture
+/// channels are returned to shared state so the next client can reuse them.
 pub struct LiveDisplay {
     width: u16,
     height: u16,
-    event_rx: Option<mpsc::Receiver<CaptureEvent>>,
+    channels: Arc<std::sync::Mutex<DisplayChannels>>,
     /// Sender half of the resize channel. When the RDP client requests a
     /// layout change, we send the new size here; the `LiveDisplayUpdates`
     /// picks it up and emits `DisplayUpdate::Resize`.
     resize_tx: mpsc::Sender<DesktopSize>,
-    /// Receiver passed to `LiveDisplayUpdates` on first call to `updates()`.
-    resize_rx: Option<mpsc::Receiver<DesktopSize>>,
 }
 
 impl LiveDisplay {
@@ -254,9 +266,11 @@ impl LiveDisplay {
         Self {
             width: info.width,
             height: info.height,
-            event_rx: Some(event_rx),
+            channels: Arc::new(std::sync::Mutex::new(DisplayChannels {
+                event_rx: Some(event_rx),
+                resize_rx: Some(resize_rx),
+            })),
             resize_tx,
-            resize_rx: Some(resize_rx),
         }
     }
 }
@@ -271,19 +285,24 @@ impl RdpServerDisplay for LiveDisplay {
     }
 
     async fn updates(&mut self) -> Result<Box<dyn RdpServerDisplayUpdates>> {
-        let event_rx = self
+        let mut channels = self.channels.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let event_rx = channels
             .event_rx
             .take()
-            .ok_or_else(|| anyhow::anyhow!("capture already started (only one connection supported)"))?;
+            .ok_or_else(|| anyhow::anyhow!("capture already in use (only one connection at a time)"))?;
 
-        let resize_rx = self
+        let resize_rx = channels
             .resize_rx
             .take()
             .ok_or_else(|| anyhow::anyhow!("resize channel already taken"))?;
 
+        tracing::info!("Display channels acquired for new connection");
+
         Ok(Box::new(LiveDisplayUpdates {
-            event_rx,
-            resize_rx,
+            event_rx: Some(event_rx),
+            resize_rx: Some(resize_rx),
+            channels: Arc::clone(&self.channels),
             pending_cursor: None,
         }))
     }
@@ -317,11 +336,22 @@ impl RdpServerDisplay for LiveDisplay {
 /// Display updates that receive live frames from the `PipeWire` capture
 /// and handle dynamic resize events from the RDP client.
 struct LiveDisplayUpdates {
-    event_rx: mpsc::Receiver<CaptureEvent>,
-    resize_rx: mpsc::Receiver<DesktopSize>,
+    event_rx: Option<mpsc::Receiver<CaptureEvent>>,
+    resize_rx: Option<mpsc::Receiver<DesktopSize>>,
+    /// Shared state to return channels to on disconnect.
+    channels: Arc<std::sync::Mutex<DisplayChannels>>,
     /// When a `FrameAndCursor` event arrives, we return the frame first
     /// and buffer the cursor update for the next call.
     pending_cursor: Option<CursorInfo>,
+}
+
+impl Drop for LiveDisplayUpdates {
+    fn drop(&mut self) {
+        let mut channels = self.channels.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        channels.event_rx = self.event_rx.take();
+        channels.resize_rx = self.resize_rx.take();
+        tracing::info!("Client disconnected, display channels released for next connection");
+    }
 }
 
 #[async_trait::async_trait]
@@ -333,9 +363,12 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
             return Ok(Some(cursor_to_display_update(&cursor)));
         }
 
+        let event_rx = self.event_rx.as_mut().expect("event_rx missing during active connection");
+        let resize_rx = self.resize_rx.as_mut().expect("resize_rx missing during active connection");
+
         // All branches are cancellation-safe (mpsc::Receiver::recv)
         tokio::select! {
-            event = self.event_rx.recv() => {
+            event = event_rx.recv() => {
                 let Some(event) = event else {
                     return Ok(None);
                 };
@@ -358,7 +391,7 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
                     }
                 }
             }
-            size = self.resize_rx.recv() => {
+            size = resize_rx.recv() => {
                 let Some(new_size) = size else {
                     // Resize channel closed - continue with frames only.
                     // This shouldn't normally happen.
