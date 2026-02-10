@@ -247,11 +247,10 @@ in
         MemoryDenyWriteExecute = true;
         RestrictRealtime = true;
         SystemCallArchitectures = "native";
-        SystemCallFilter = [
-          "@system-service"
-          "~@privileged"
-          "~@resources"
-        ];
+        # Note: ~@privileged and ~@resources are intentionally omitted.
+        # The sspi/CredSSP library needs syscalls from these groups
+        # (e.g. fchown) during NLA authentication handshakes.
+        SystemCallFilter = [ "@system-service" ];
       };
     };
 
