@@ -22,17 +22,25 @@ let
 
   # Wrapper script that injects the password from the credential file
   # into the TOML config at runtime, then execs the server.
+  # Uses only shell builtins (no sed/awk) to avoid SIGSYS from SystemCallFilter.
   startScript = pkgs.writeShellScript "cosmic-rdp-server-start" ''
     CONFIG="${configFile}"
 
     if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -f "$CREDENTIALS_DIRECTORY/rdp-password" ]; then
       RUNTIME_CONFIG="''${RUNTIME_DIRECTORY}/config.toml"
-      PASSWORD=$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/rdp-password")
+      PASSWORD=$(<"$CREDENTIALS_DIRECTORY/rdp-password")
       # Escape backslashes and double quotes for safe TOML string embedding
-      PASSWORD=$(printf '%s' "$PASSWORD" | ${pkgs.gnused}/bin/sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
-      # Use piped sed (not sed -i) to avoid rename/unlink syscalls blocked by SystemCallFilter
-      ${pkgs.gnused}/bin/sed "/^\[auth\]/a password = \"$PASSWORD\"" "$CONFIG" > "$RUNTIME_CONFIG"
-      ${pkgs.coreutils}/bin/chmod 0600 "$RUNTIME_CONFIG"
+      PASSWORD="''${PASSWORD//\\/\\\\}"
+      PASSWORD="''${PASSWORD//\"/\\\"}"
+      # Rebuild config with password injected after [auth] using only shell builtins.
+      # Use umask (builtin) to ensure restrictive permissions on the output file.
+      umask 0177
+      while IFS= read -r line; do
+        printf '%s\n' "$line"
+        if [ "$line" = "[auth]" ]; then
+          printf 'password = "%s"\n' "$PASSWORD"
+        fi
+      done < "$CONFIG" > "$RUNTIME_CONFIG"
       CONFIG="$RUNTIME_CONFIG"
     fi
 
