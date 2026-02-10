@@ -440,7 +440,9 @@ fn discover_devices(context: ei::Context, mut serial: u32) -> Result<EiInput, In
 
     // Process events in a tight loop with a short timeout.
     // The EIS server sends the seat/device info immediately after handshake.
-    for _ in 0..200 {
+    // Note: the handshake may have buffered post-handshake data (seat info)
+    // in the context, so we must always drain pending events even on timeout.
+    for iteration in 0..200 {
         // Poll for readable data with a short timeout
         let poll_result = rustix::event::poll(
             &mut [rustix::event::PollFd::new(
@@ -452,23 +454,23 @@ fn discover_devices(context: ei::Context, mut serial: u32) -> Result<EiInput, In
 
         match poll_result {
             Ok(0) => {
-                // Timeout - if we have a device and it's resumed, we're done
-                if found_device.is_some() && resumed {
-                    break;
-                }
-                continue;
+                // Timeout - no new socket data, but still drain any
+                // events already buffered from a previous read.
             }
-            Ok(_) => {}
+            Ok(_) => {
+                // New data available on socket - read it into the buffer
+                context
+                    .read()
+                    .map_err(|e| InputError::Init(format!("read error: {e}")))?;
+            }
             Err(e) => {
                 return Err(InputError::Init(format!("poll error: {e}")));
             }
         }
 
-        context
-            .read()
-            .map_err(|e| InputError::Init(format!("read error: {e}")))?;
-
+        let mut got_events = false;
         while let Some(result) = context.pending_event() {
+            got_events = true;
             let event = match result {
                 PendingRequestResult::Request(event) => event,
                 PendingRequestResult::ParseError(e) => {
@@ -545,7 +547,19 @@ fn discover_devices(context: ei::Context, mut serial: u32) -> Result<EiInput, In
         let _ = context.flush();
 
         if found_device.is_some() && resumed {
+            tracing::debug!(iteration, "Device discovery complete");
             break;
+        }
+
+        // Log progress periodically to aid debugging
+        if got_events && iteration % 10 == 0 {
+            tracing::debug!(
+                iteration,
+                seats = seats.len(),
+                has_device = found_device.is_some(),
+                resumed,
+                "Device discovery progress"
+            );
         }
     }
 
