@@ -10,6 +10,7 @@ pub mod compositor;
 pub mod frame;
 pub mod pipewire_stream;
 pub mod portal;
+pub mod spa_meta;
 
 pub use audio_stream::{AudioCaptureError, PwAudioStream};
 pub use compositor::{bounding_box, FrameCompositor, MonitorInfo};

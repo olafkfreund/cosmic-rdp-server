@@ -10,4 +10,4 @@ pub mod keymap;
 pub mod libei;
 
 pub use keymap::rdp_scancode_to_evdev;
-pub use libei::{EiInput, InputError, MouseButton};
+pub use libei::{EiInput, InputError, LockState, MouseButton};

@@ -1,5 +1,5 @@
 /// A rectangular region of damage (changed pixels).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DamageRect {
     pub x: i32,
     pub y: i32,

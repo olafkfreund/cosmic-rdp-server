@@ -3,6 +3,7 @@ use std::num::{NonZeroU16, NonZeroUsize};
 use anyhow::Result;
 use bytes::Bytes;
 use ironrdp_displaycontrol::pdu::DisplayControlMonitorLayout;
+use ironrdp_pdu::input::fast_path::SynchronizeFlags;
 use ironrdp_server::{
     BitmapUpdate, CliprdrServerFactory, DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent,
     PixelFormat, RGBAPointer, RdpServer, RdpServerDisplay, RdpServerDisplayUpdates,
@@ -60,15 +61,34 @@ impl RdpServerInputHandler for LiveInputHandler {
             KeyboardEvent::Released { code, extended } => {
                 self.input.key_release(code, extended);
             }
-            KeyboardEvent::UnicodePressed(_) | KeyboardEvent::UnicodeReleased(_) => {
-                // Unicode key events are not yet supported.
-                // These require XKB compose / text input protocol integration.
-                tracing::debug!(?event, "Unicode key event ignored (not yet supported)");
+            // Unicode key events (e.g. from IME composition or special characters).
+            //
+            // Full implementation requires one of:
+            //   1. XKB compose sequences (limited to characters in the keymap)
+            //   2. zwp_text_input_v3 Wayland protocol (requires compositor support)
+            //   3. zwp_virtual_keyboard_v1 with a custom keymap containing the codepoint
+            //
+            // All three approaches need significant Wayland protocol work beyond
+            // basic libei input injection. Deferred until compositor-side support
+            // matures (see issue #18).
+            KeyboardEvent::UnicodePressed(codepoint) => {
+                tracing::debug!(
+                    codepoint,
+                    char = %char::from_u32(u32::from(codepoint)).unwrap_or('\u{FFFD}'),
+                    "Unicode key press ignored (not yet supported)"
+                );
             }
-            KeyboardEvent::Synchronize(_flags) => {
-                // Lock key sync (Caps Lock, Num Lock, Scroll Lock).
-                // TODO: Read current LED state and toggle to match.
-                tracing::debug!(?event, "Key synchronize event ignored (not yet supported)");
+            KeyboardEvent::UnicodeReleased(codepoint) => {
+                tracing::trace!(
+                    codepoint,
+                    "Unicode key release ignored (not yet supported)"
+                );
+            }
+            KeyboardEvent::Synchronize(flags) => {
+                let caps = flags.contains(SynchronizeFlags::CAPS_LOCK);
+                let num = flags.contains(SynchronizeFlags::NUM_LOCK);
+                let scroll = flags.contains(SynchronizeFlags::SCROLL_LOCK);
+                self.input.synchronize_locks(caps, num, scroll);
             }
         }
     }

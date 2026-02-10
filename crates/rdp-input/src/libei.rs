@@ -15,6 +15,51 @@ use reis::PendingRequestResult;
 
 use crate::keymap::rdp_scancode_to_evdev;
 
+/// Evdev keycodes for lock keys.
+const KEY_CAPSLOCK: u16 = 66;
+const KEY_NUMLOCK: u16 = 77;
+const KEY_SCROLLLOCK: u16 = 78;
+
+/// Shadow state for lock key indicators (Caps Lock, Num Lock, Scroll Lock).
+///
+/// The RDP client periodically sends `Synchronize` events with the current
+/// lock key state. We track our own shadow state based on injected key events
+/// and toggle mismatches when a `Synchronize` arrives.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LockState {
+    pub caps_lock: bool,
+    pub num_lock: bool,
+    pub scroll_lock: bool,
+}
+
+impl LockState {
+    /// Return which lock keys need toggling to reach the `target` state.
+    #[must_use]
+    pub fn locks_to_toggle(&self, target: &Self) -> Vec<u16> {
+        let mut keys = Vec::new();
+        if self.caps_lock != target.caps_lock {
+            keys.push(KEY_CAPSLOCK);
+        }
+        if self.num_lock != target.num_lock {
+            keys.push(KEY_NUMLOCK);
+        }
+        if self.scroll_lock != target.scroll_lock {
+            keys.push(KEY_SCROLLLOCK);
+        }
+        keys
+    }
+
+    /// Toggle the shadow state for a lock key that was just pressed.
+    fn toggle_on_press(&mut self, evdev: u16) {
+        match evdev {
+            KEY_CAPSLOCK => self.caps_lock = !self.caps_lock,
+            KEY_NUMLOCK => self.num_lock = !self.num_lock,
+            KEY_SCROLLLOCK => self.scroll_lock = !self.scroll_lock,
+            _ => {}
+        }
+    }
+}
+
 /// Linux input event codes for mouse buttons.
 const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
@@ -73,6 +118,9 @@ pub struct EiInput {
     serial: u32,
     sequence: u32,
     emulating: bool,
+    /// Shadow state for lock key indicators, updated on every injected
+    /// key press and compared against `Synchronize` events.
+    lock_state: LockState,
 }
 
 impl EiInput {
@@ -119,6 +167,7 @@ impl EiInput {
     /// Inject a keyboard key press.
     ///
     /// Converts the RDP XT scancode to an evdev keycode and sends a press event.
+    /// Also updates the shadow lock key state when a lock key is pressed.
     pub fn key_press(&mut self, code: u8, extended: bool) {
         if self.keyboard.is_none() {
             tracing::debug!("No keyboard capability, ignoring key press");
@@ -133,6 +182,58 @@ impl EiInput {
         if let Some(ref keyboard) = self.keyboard {
             keyboard.key(u32::from(evdev) - 8, ei::keyboard::KeyState::Press);
         }
+        self.lock_state.toggle_on_press(evdev);
+        self.frame_and_flush();
+    }
+
+    /// Synchronize lock key state with the RDP client.
+    ///
+    /// Compares the client's reported lock state against our shadow state
+    /// and injects press+release events for any mismatched lock keys.
+    pub fn synchronize_locks(&mut self, caps: bool, num: bool, scroll: bool) {
+        let target = LockState {
+            caps_lock: caps,
+            num_lock: num,
+            scroll_lock: scroll,
+        };
+
+        let to_toggle = self.lock_state.locks_to_toggle(&target);
+        if to_toggle.is_empty() {
+            tracing::trace!("Lock state already in sync");
+            return;
+        }
+
+        tracing::debug!(
+            ?target,
+            current = ?self.lock_state,
+            count = to_toggle.len(),
+            "Synchronizing lock keys"
+        );
+
+        for evdev in to_toggle {
+            self.toggle_lock_key(evdev);
+        }
+    }
+
+    /// Toggle a lock key by injecting press + release with separate frames.
+    fn toggle_lock_key(&mut self, evdev: u16) {
+        if self.keyboard.is_none() {
+            return;
+        }
+        self.ensure_emulating();
+        let xkb = u32::from(evdev) - 8;
+
+        // Press
+        if let Some(ref keyboard) = self.keyboard {
+            keyboard.key(xkb, ei::keyboard::KeyState::Press);
+        }
+        self.frame_and_flush();
+
+        // Release
+        if let Some(ref keyboard) = self.keyboard {
+            keyboard.key(xkb, ei::keyboard::KeyState::Released);
+        }
+        self.lock_state.toggle_on_press(evdev);
         self.frame_and_flush();
     }
 
@@ -479,6 +580,7 @@ fn discover_devices(context: ei::Context, mut serial: u32) -> Result<EiInput, In
         serial,
         sequence: 0,
         emulating: false,
+        lock_state: LockState::default(),
     })
 }
 
@@ -488,4 +590,84 @@ pub enum InputError {
     /// Failed to initialize the reis/libei backend.
     #[error("failed to initialize input backend: {0}")]
     Init(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lock_state_default_all_off() {
+        let state = LockState::default();
+        assert!(!state.caps_lock);
+        assert!(!state.num_lock);
+        assert!(!state.scroll_lock);
+    }
+
+    #[test]
+    fn lock_state_toggle_on_press() {
+        let mut state = LockState::default();
+
+        // First press toggles ON
+        state.toggle_on_press(KEY_CAPSLOCK);
+        assert!(state.caps_lock);
+        assert!(!state.num_lock);
+
+        // Second press toggles OFF
+        state.toggle_on_press(KEY_CAPSLOCK);
+        assert!(!state.caps_lock);
+
+        // Num Lock toggle
+        state.toggle_on_press(KEY_NUMLOCK);
+        assert!(state.num_lock);
+
+        // Scroll Lock toggle
+        state.toggle_on_press(KEY_SCROLLLOCK);
+        assert!(state.scroll_lock);
+
+        // Non-lock key does nothing
+        state.toggle_on_press(38); // 'A' key
+        assert!(state.num_lock);
+        assert!(state.scroll_lock);
+    }
+
+    #[test]
+    fn locks_to_toggle_no_diff() {
+        let current = LockState {
+            caps_lock: true,
+            num_lock: false,
+            scroll_lock: true,
+        };
+        let target = current.clone();
+        assert!(current.locks_to_toggle(&target).is_empty());
+    }
+
+    #[test]
+    fn locks_to_toggle_all_different() {
+        let current = LockState::default();
+        let target = LockState {
+            caps_lock: true,
+            num_lock: true,
+            scroll_lock: true,
+        };
+        let mut keys = current.locks_to_toggle(&target);
+        keys.sort_unstable();
+        assert_eq!(keys, vec![KEY_CAPSLOCK, KEY_NUMLOCK, KEY_SCROLLLOCK]);
+    }
+
+    #[test]
+    fn locks_to_toggle_partial_diff() {
+        let current = LockState {
+            caps_lock: true,
+            num_lock: false,
+            scroll_lock: false,
+        };
+        let target = LockState {
+            caps_lock: true,
+            num_lock: true,
+            scroll_lock: false,
+        };
+        let keys = current.locks_to_toggle(&target);
+        assert_eq!(keys, vec![KEY_NUMLOCK]);
+    }
 }
