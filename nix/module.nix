@@ -11,9 +11,10 @@ let
     auth = {
       enable = true;
       username = cfg.auth.username;
-      domain = cfg.auth.domain;
       # Password is read from passwordFile at service start via
       # LoadCredential, then injected with a wrapper script.
+    } // optionalAttrs (cfg.auth.domain != null) {
+      domain = cfg.auth.domain;
     };
   };
 
