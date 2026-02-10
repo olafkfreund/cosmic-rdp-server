@@ -169,7 +169,7 @@ fn load_and_merge_config(cli: &Cli) -> Result<config::ServerConfig> {
 fn setup_tls(cfg: &config::ServerConfig) -> Result<tls::TlsContext> {
     match (&cfg.cert_path, &cfg.key_path) {
         (Some(cert), Some(key)) => tls::load_from_files(cert, key),
-        _ => tls::generate_self_signed(),
+        _ => tls::generate_self_signed(cfg.bind.ip()),
     }
 }
 
@@ -180,6 +180,9 @@ fn setup_auth(cfg: &config::ServerConfig) -> Result<Option<server::AuthCredentia
     }
     if cfg.auth.username.is_empty() {
         bail!("auth.enable is true but auth.username is empty");
+    }
+    if cfg.auth.password.is_empty() {
+        bail!("auth.enable is true but auth.password is empty");
     }
     tracing::info!(username = %cfg.auth.username, "NLA authentication enabled");
     Ok(Some(server::AuthCredentials {

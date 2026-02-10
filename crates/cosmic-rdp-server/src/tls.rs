@@ -1,8 +1,9 @@
+use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rcgen::{CertificateParams, KeyPair};
+use rcgen::{CertificateParams, KeyPair, SanType};
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio_rustls::{rustls, TlsAcceptor};
 
@@ -18,15 +19,32 @@ pub struct TlsContext {
 
 /// Generate a self-signed TLS certificate and return a [`TlsContext`].
 ///
+/// The bind address IP is included in the certificate SAN so that
+/// RDP clients connecting by IP see a matching certificate.
+///
 /// # Errors
 ///
 /// Returns an error if key generation or certificate creation fails.
-pub fn generate_self_signed() -> Result<TlsContext> {
+pub fn generate_self_signed(bind_ip: IpAddr) -> Result<TlsContext> {
     tracing::info!("Generating self-signed TLS certificate");
 
     let key_pair = KeyPair::generate().context("failed to generate key pair")?;
-    let mut params = CertificateParams::new(vec!["localhost".to_string()])
+
+    let mut san_names = vec!["localhost".to_string()];
+    // Include the bind IP in SAN unless it is an unspecified address.
+    let ip_str = bind_ip.to_string();
+    if !bind_ip.is_unspecified() && ip_str != "localhost" {
+        san_names.push(ip_str);
+    }
+
+    let mut params = CertificateParams::new(san_names)
         .context("failed to create certificate params")?;
+
+    // Also add the bind IP as an IP SAN (not just DNS SAN).
+    if !bind_ip.is_unspecified() {
+        params.subject_alt_names.push(SanType::IpAddress(bind_ip));
+    }
+
     params.distinguished_name.push(
         rcgen::DnType::CommonName,
         rcgen::DnValue::Utf8String("cosmic-rdp-server".to_string()),

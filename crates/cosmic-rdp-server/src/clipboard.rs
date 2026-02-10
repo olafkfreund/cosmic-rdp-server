@@ -18,6 +18,9 @@ use ironrdp_cliprdr::pdu::{
 use ironrdp_server::{CliprdrServerFactory, ServerEvent, ServerEventSender};
 use tokio::sync::mpsc;
 
+/// Maximum clipboard data size accepted from remote clients (10 MiB).
+const MAX_CLIPBOARD_DATA_BYTES: usize = 10 * 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // Backend (one per RDP connection)
 // ---------------------------------------------------------------------------
@@ -160,9 +163,19 @@ impl CliprdrBackend for LocalClipboardBackend {
             return;
         }
 
+        let data = response.data();
+        if data.len() > MAX_CLIPBOARD_DATA_BYTES {
+            tracing::warn!(
+                size = data.len(),
+                max = MAX_CLIPBOARD_DATA_BYTES,
+                "Rejecting oversized clipboard data from remote"
+            );
+            return;
+        }
+
         // Try UTF-16LE first (CF_UNICODETEXT), fall back to ANSI (CF_TEXT).
-        let text = decode_utf16le_text(response.data())
-            .or_else(|| decode_ansi_text(response.data()));
+        let text = decode_utf16le_text(data)
+            .or_else(|| decode_ansi_text(data));
 
         match text {
             Some(s) => {

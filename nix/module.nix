@@ -96,7 +96,7 @@ in
         options = {
           bind = mkOption {
             type = types.str;
-            default = "0.0.0.0:3389";
+            default = "127.0.0.1:3389";
             description = "Address and port to bind the RDP server to.";
           };
 

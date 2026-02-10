@@ -125,7 +125,7 @@ pub struct ServerConfig {
 }
 
 /// NLA authentication configuration.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AuthConfig {
     /// Enable NLA (Network Level Authentication) via `CredSSP`.
@@ -141,6 +141,17 @@ pub struct AuthConfig {
 
     /// Windows domain (optional).
     pub domain: Option<String>,
+}
+
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthConfig")
+            .field("enable", &self.enable)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .field("domain", &self.domain)
+            .finish()
+    }
 }
 
 /// Screen capture settings.
@@ -213,7 +224,7 @@ pub struct EncodeConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            bind: "0.0.0.0:3389".parse().expect("valid default address"),
+            bind: "127.0.0.1:3389".parse().expect("valid default address"),
             cert_path: None,
             key_path: None,
             static_display: false,

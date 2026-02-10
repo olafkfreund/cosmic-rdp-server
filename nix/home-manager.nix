@@ -24,11 +24,9 @@ let
       ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$RUNTIME_CONFIG")"
       ${pkgs.coreutils}/bin/cp "$CONFIG" "$RUNTIME_CONFIG"
       PASSWORD=$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/rdp-password")
-      ${pkgs.coreutils}/bin/cat >> "$RUNTIME_CONFIG" <<TOMLEOF
-
-[auth]
-password = "$PASSWORD"
-TOMLEOF
+      # Escape backslashes and double quotes for safe TOML string embedding
+      PASSWORD=$(printf '%s' "$PASSWORD" | ${pkgs.gnused}/bin/sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+      printf '\n[auth]\npassword = "%s"\n' "$PASSWORD" >> "$RUNTIME_CONFIG"
       CONFIG="$RUNTIME_CONFIG"
     fi
 
@@ -105,7 +103,7 @@ in
         options = {
           bind = mkOption {
             type = types.str;
-            default = "0.0.0.0:3389";
+            default = "127.0.0.1:3389";
             description = "Address and port to bind the RDP server to.";
           };
 
