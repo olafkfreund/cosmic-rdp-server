@@ -165,6 +165,11 @@
         cosmic-rdp-server = import ./nix/module.nix;
       };
 
+      homeManagerModules = {
+        default = import ./nix/home-manager.nix;
+        cosmic-rdp-server = import ./nix/home-manager.nix;
+      };
+
       overlays.default = final: prev: {
         cosmic-rdp-server = self.packages.${prev.system}.default;
         cosmic-rdp-settings = self.packages.${prev.system}.cosmic-rdp-settings;
