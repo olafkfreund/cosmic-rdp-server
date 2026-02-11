@@ -97,11 +97,23 @@ fn zgfx_wrap_messages(messages: Vec<DvcMessage>) -> Vec<DvcMessage> {
     messages
         .into_iter()
         .map(|msg| {
+            let raw_size = msg.size();
             let raw = encode_vec(msg.as_ref()).unwrap_or_default();
+            tracing::trace!(
+                raw_size,
+                encoded_len = raw.len(),
+                first_bytes = ?&raw[..raw.len().min(32)],
+                "EGFX ZGFX: encoding inner DvcMessage"
+            );
             let mut data = Vec::with_capacity(2 + raw.len());
             data.push(0xE0); // ZGFX single segment descriptor
             data.push(0x04); // RDP8 uncompressed type
             data.extend_from_slice(&raw);
+            tracing::trace!(
+                total_len = data.len(),
+                first_bytes = ?&data[..data.len().min(32)],
+                "EGFX ZGFX: wrapped message"
+            );
             Box::new(ZgfxWrapped { data }) as DvcMessage
         })
         .collect()
@@ -145,10 +157,20 @@ impl DvcProcessor for EgfxBridge {
     }
 
     fn process(&mut self, channel_id: u32, payload: &[u8]) -> PduResult<Vec<DvcMessage>> {
+        tracing::trace!(
+            channel_id,
+            payload_len = payload.len(),
+            first_bytes = ?&payload[..payload.len().min(32)],
+            "EGFX: incoming DVC payload"
+        );
         let mut inner = lock_shared(&self.shared);
 
         let was_ready = inner.ready;
         let mut messages = inner.server.process(channel_id, payload)?;
+        tracing::trace!(
+            message_count = messages.len(),
+            "EGFX: server.process() returned messages"
+        );
 
         // Sync our ready flag from the server's internal state.
         inner.ready = inner.server.is_ready();

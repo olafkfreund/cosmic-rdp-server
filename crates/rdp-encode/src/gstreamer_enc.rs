@@ -75,7 +75,7 @@ pub fn detect_best_encoder() -> EncoderType {
 /// Creates and manages the pipeline:
 /// `appsrc ! videoconvert ! encoder ! h264parse ! appsink`
 ///
-/// Push raw BGRA frames via [`encode_frame`](GstEncoder::encode_frame)
+/// Push raw BGRx/BGRA frames via [`encode_frame`](GstEncoder::encode_frame)
 /// and receive H.264 NAL units in byte-stream format.
 pub struct GstEncoder {
     pipeline: gst::Pipeline,
@@ -128,6 +128,17 @@ impl GstEncoder {
             .set_state(gst::State::Playing)
             .map_err(|e| EncodeError::StateChange(e.to_string()))?;
         self.running = true;
+
+        // Log negotiated caps on videoconvert to confirm colorimetry fix.
+        if let Some(convert) = self.pipeline.by_name("convert") {
+            if let Some(caps) = convert.static_pad("sink").and_then(|p| p.current_caps()) {
+                tracing::info!(%caps, "videoconvert input caps");
+            }
+            if let Some(caps) = convert.static_pad("src").and_then(|p| p.current_caps()) {
+                tracing::info!(%caps, "videoconvert output caps");
+            }
+        }
+
         tracing::info!("Encoder pipeline started");
         Ok(())
     }
@@ -257,15 +268,31 @@ fn build_pipeline(
 
     let pipeline = gst::Pipeline::new();
 
-    // AppSrc: raw video input (BGRx format from PipeWire)
+    // AppSrc: raw video input from PipeWire.
+    //
+    // PipeWire delivers BGRx data (memory: [B, G, R, x]). The RDP
+    // bitmap path sends these bytes directly with PixelFormat::BgrA32
+    // and the client displays correct colors.
+    //
+    // Colorimetry `sRGB` = `2:0:0:1` (full range, identity matrix,
+    // sRGB transfer, BT.709 primaries). The identity matrix tells
+    // videoconvert "this is raw RGB with no YUV matrix applied", so it
+    // derives the RGB→YUV conversion matrix from the downstream
+    // capsfilter (BT.709 full-range). Without this, videoconvert may
+    // infer an incorrect default matrix, causing a blueish color shift.
+    //
+    // Combined with `matrix-mode=output-only` on videoconvert this
+    // ensures the entire RGB→YUV→H.264→decode chain uses consistent
+    // BT.709 full-range coefficients.
     let appsrc = gst_app::AppSrc::builder()
         .name("source")
         .caps(
-            &gst_video::VideoCapsBuilder::new()
-                .format(gst_video::VideoFormat::Bgrx)
-                .width(width)
-                .height(height)
-                .framerate(gst::Fraction::new(framerate, 1))
+            &gst::Caps::builder("video/x-raw")
+                .field("format", "BGRx")
+                .field("width", width)
+                .field("height", height)
+                .field("framerate", gst::Fraction::new(framerate, 1))
+                .field("colorimetry", "sRGB")
                 .build(),
         )
         .format(gst::Format::Time)
@@ -273,8 +300,37 @@ fn build_pipeline(
         .do_timestamp(true)
         .build();
 
-    // videoconvert: color space conversion
+    // videoconvert: color space conversion (BGRx → I420 YUV for H.264).
+    //
+    // `matrix-mode=output-only` forces the YUV conversion matrix to come
+    // exclusively from the downstream capsfilter (BT.709 full-range),
+    // ignoring any inferred input colorimetry. This eliminates ambiguity
+    // and prevents the blueish color shift seen when videoconvert guesses
+    // the wrong matrix from missing/mismatched input colorimetry.
     let videoconvert = make_element("videoconvert", "convert")?;
+    videoconvert.set_property_from_str("matrix-mode", "output-only");
+
+    // Capsfilter: force full-range BT.709 colorimetry on I420 output.
+    //
+    // FreeRDP's AVC420 decoder (prim_YUV.c) uses fixed-point coefficients
+    // that match BT.709 full-range, NOT BT.601:
+    //   Cr→R: 403/256 = 1.5742  (BT.709: 1.5748, BT.601: 1.402)
+    //   Cb→B: 475/256 = 1.8555  (BT.709: 1.8556, BT.601: 1.772)
+    // The decoder also uses no Y-16 offset, confirming full range (0-255).
+    //
+    // Colorimetry string: range:matrix:transfer:primaries
+    //   1 = full range (0-255)
+    //   3 = BT.709 matrix
+    //   5 = BT.709 transfer function
+    //   1 = BT.709 primaries
+    let capsfilter = make_element("capsfilter", "colorfix")?;
+    capsfilter.set_property(
+        "caps",
+        gst::Caps::builder("video/x-raw")
+            .field("format", "I420")
+            .field("colorimetry", "1:3:5:1")
+            .build(),
+    );
 
     // H.264 encoder: hardware or software
     let encoder = make_element(encoder_type.element_name(), "encoder")?;
@@ -294,11 +350,12 @@ fn build_pipeline(
         )
         .build();
 
-    // Add and link elements
+    // Pipeline: appsrc ! videoconvert ! capsfilter(I420, BT.709 full) ! encoder ! h264parse ! appsink
     pipeline
         .add_many([
             appsrc.upcast_ref(),
             &videoconvert,
+            &capsfilter,
             &encoder,
             &h264parse,
             appsink.upcast_ref(),
@@ -308,6 +365,7 @@ fn build_pipeline(
     gst::Element::link_many([
         appsrc.upcast_ref(),
         &videoconvert,
+        &capsfilter,
         &encoder,
         &h264parse,
         appsink.upcast_ref(),
@@ -363,6 +421,10 @@ fn configure_encoder(encoder: &gst::Element, encoder_type: EncoderType, config: 
         EncoderType::Software => {
             encoder.set_property("bitrate", bitrate_kbps);
             encoder.set_property("key-int-max", config.keyframe_interval);
+            // Ensure x264 preserves full-range YUV (0-255) from our capsfilter.
+            // GStreamer reads colorimetry from input caps, but set explicitly
+            // via option-string as a safety measure.
+            encoder.set_property_from_str("option-string", "fullrange=on");
             if config.low_latency {
                 encoder.set_property_from_str("tune", "zerolatency");
                 encoder.set_property_from_str("speed-preset", "ultrafast");

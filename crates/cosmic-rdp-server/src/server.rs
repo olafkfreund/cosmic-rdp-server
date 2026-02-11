@@ -240,8 +240,6 @@ fn create_blue_bitmap(width: u16, height: u16) -> BitmapUpdate {
 /// connection can reuse them without restarting capture.
 struct DisplayChannels {
     event_rx: Option<mpsc::Receiver<CaptureEvent>>,
-    resize_rx: Option<mpsc::Receiver<DesktopSize>>,
-    egfx: Option<EgfxController>,
 }
 
 /// Display that streams live screen capture frames via `PipeWire` and
@@ -253,11 +251,8 @@ pub struct LiveDisplay {
     width: u16,
     height: u16,
     channels: Arc<std::sync::Mutex<DisplayChannels>>,
-    /// Sender half of the resize channel. When the RDP client requests a
-    /// layout change, we send the new size here; the `LiveDisplayUpdates`
-    /// picks it up and emits `DisplayUpdate::Resize`.
-    resize_tx: mpsc::Sender<DesktopSize>,
-    /// EGFX controller for H.264 delivery (optional).
+    /// EGFX controller for H.264 delivery and resize (optional).
+    /// Retained across connections (cloned into `LiveDisplayUpdates`).
     egfx: Option<EgfxController>,
 }
 
@@ -267,16 +262,12 @@ impl LiveDisplay {
     /// The caller must keep the [`rdp_capture::CaptureHandle`] alive for the
     /// duration of the display, otherwise frames will stop arriving.
     pub fn new(event_rx: mpsc::Receiver<CaptureEvent>, info: &DesktopInfo) -> Self {
-        let (resize_tx, resize_rx) = mpsc::channel(4);
         Self {
             width: info.width,
             height: info.height,
             channels: Arc::new(std::sync::Mutex::new(DisplayChannels {
                 event_rx: Some(event_rx),
-                resize_rx: Some(resize_rx),
-                egfx: None,
             })),
-            resize_tx,
             egfx: None,
         }
     }
@@ -304,24 +295,28 @@ impl RdpServerDisplay for LiveDisplay {
             .take()
             .ok_or_else(|| anyhow::anyhow!("capture already in use (only one connection at a time)"))?;
 
-        let resize_rx = channels
-            .resize_rx
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("resize channel already taken"))?;
+        // Clone EGFX controller so LiveDisplay retains access for
+        // request_layout() while LiveDisplayUpdates gets its own handle.
+        let egfx = self.egfx.clone();
 
-        // Take EGFX controller: first from channels (returned by previous
-        // connection), then from self (first connection only).
-        let egfx = channels.egfx.take().or_else(|| self.egfx.take());
+        // Reset EGFX state so the new connection starts with a fresh
+        // capability handshake. Without this, stale `ready` / `supports_avc420`
+        // flags from a previous connection cause H.264 to be sent without a
+        // valid DVC channel.
+        if let Some(ref egfx) = egfx {
+            egfx.reset();
+        }
 
         tracing::info!("Display channels acquired for new connection");
 
         Ok(Box::new(LiveDisplayUpdates {
             event_rx: Some(event_rx),
-            resize_rx: Some(resize_rx),
             channels: Arc::clone(&self.channels),
             pending_cursor: None,
             egfx,
             encoder: None,
+            encoder_width: 0,
+            encoder_height: 0,
             frame_timestamp_ms: 0,
         }))
     }
@@ -334,6 +329,7 @@ impl RdpServerDisplay for LiveDisplay {
         };
 
         let (width, height) = primary.dimensions();
+
         let Ok(width) = u16::try_from(width) else {
             tracing::warn!(width, "Requested width exceeds u16, ignoring resize");
             return;
@@ -343,12 +339,33 @@ impl RdpServerDisplay for LiveDisplay {
             return;
         };
 
-        tracing::info!(width, height, "Client requested display resize");
-
-        let new_size = DesktopSize { width, height };
-        if let Err(e) = self.resize_tx.try_send(new_size) {
-            tracing::warn!("Failed to send resize request: {e}");
+        if width == self.width && height == self.height {
+            tracing::debug!(width, height, "Resize requested but dimensions unchanged");
+            return;
         }
+
+        // Route resize through EGFX ResetGraphics instead of
+        // DisplayUpdate::Resize to avoid ironrdp-server 0.10's broken
+        // deactivation-reactivation sequence.
+        if let Some(ref egfx) = self.egfx {
+            if egfx.is_ready() {
+                tracing::info!(
+                    width, height,
+                    old_width = self.width, old_height = self.height,
+                    "Resizing display via EGFX ResetGraphics"
+                );
+                egfx.resize(width, height);
+                self.width = width;
+                self.height = height;
+                return;
+            }
+        }
+
+        // EGFX not available or not ready — cannot resize safely.
+        tracing::info!(
+            width, height,
+            "Client requested resize but EGFX not ready, ignoring"
+        );
     }
 }
 
@@ -361,7 +378,6 @@ impl RdpServerDisplay for LiveDisplay {
 /// EGFX is not negotiated.
 struct LiveDisplayUpdates {
     event_rx: Option<mpsc::Receiver<CaptureEvent>>,
-    resize_rx: Option<mpsc::Receiver<DesktopSize>>,
     /// Shared state to return channels to on disconnect.
     channels: Arc<std::sync::Mutex<DisplayChannels>>,
     /// When a `FrameAndCursor` event arrives, we return the frame first
@@ -371,6 +387,9 @@ struct LiveDisplayUpdates {
     egfx: Option<EgfxController>,
     /// H.264 encoder, lazily initialized on first EGFX frame.
     encoder: Option<GstEncoder>,
+    /// Dimensions of the current encoder (0 = not yet initialized).
+    encoder_width: u32,
+    encoder_height: u32,
     /// Frame timestamp counter (milliseconds), monotonically increasing.
     frame_timestamp_ms: u32,
 }
@@ -379,8 +398,7 @@ impl Drop for LiveDisplayUpdates {
     fn drop(&mut self) {
         let mut channels = self.channels.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         channels.event_rx = self.event_rx.take();
-        channels.resize_rx = self.resize_rx.take();
-        channels.egfx = self.egfx.take();
+        // EGFX controller is not returned — LiveDisplay retains its own clone.
         // Drop the encoder to release GStreamer resources.
         self.encoder = None;
         tracing::info!("Client disconnected, display channels released for next connection");
@@ -396,69 +414,62 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
             return Ok(Some(cursor_to_display_update(&cursor)));
         }
 
-        // Destructure self into individual fields so the borrow checker
-        // can track each independently inside tokio::select!.
-        let Self {
-            event_rx,
-            resize_rx,
-            pending_cursor,
-            egfx,
-            encoder,
-            frame_timestamp_ms,
-            ..
-        } = self;
-
-        let event_rx = event_rx.as_mut().expect("event_rx missing during active connection");
-        let resize_rx = resize_rx.as_mut().expect("resize_rx missing during active connection");
+        let event_rx = self.event_rx.as_mut().expect("event_rx missing during active connection");
 
         loop {
-            // All branches are cancellation-safe (mpsc::Receiver::recv)
-            tokio::select! {
-                event = event_rx.recv() => {
-                    let Some(event) = event else {
-                        return Ok(None);
-                    };
+            let Some(event) = event_rx.recv().await else {
+                return Ok(None);
+            };
 
-                    match event {
-                        CaptureEvent::Frame(mut frame) => {
-                            frame.ensure_alpha_opaque();
-                            if try_send_egfx_frame(egfx.as_ref(), encoder, frame_timestamp_ms, &frame) {
-                                // Frame sent via EGFX H.264 — don't return
-                                // a bitmap, loop back for the next event.
-                                continue;
-                            }
-                            let bitmap = frame_to_bitmap(frame)?;
-                            return Ok(Some(DisplayUpdate::Bitmap(bitmap)));
-                        }
-                        CaptureEvent::Cursor(cursor) => {
-                            return Ok(Some(cursor_to_display_update(&cursor)));
-                        }
-                        CaptureEvent::FrameAndCursor(mut frame, cursor) => {
-                            // Buffer cursor for next call.
-                            *pending_cursor = Some(cursor);
-                            frame.ensure_alpha_opaque();
-                            if try_send_egfx_frame(egfx.as_ref(), encoder, frame_timestamp_ms, &frame) {
-                                continue;
-                            }
-                            let bitmap = frame_to_bitmap(frame)?;
-                            return Ok(Some(DisplayUpdate::Bitmap(bitmap)));
-                        }
+            match event {
+                CaptureEvent::Frame(mut frame) => {
+                    frame.ensure_alpha_opaque();
+                    // Log first pixel bytes once to diagnose color channel order.
+                    if frame.sequence == 0 && frame.data.len() >= 12 {
+                        tracing::info!(
+                            pixel_0 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
+                                frame.data[0], frame.data[1], frame.data[2], frame.data[3]),
+                            pixel_1 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
+                                frame.data[4], frame.data[5], frame.data[6], frame.data[7]),
+                            pixel_2 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
+                                frame.data[8], frame.data[9], frame.data[10], frame.data[11]),
+                            width = frame.width,
+                            height = frame.height,
+                            format = ?frame.format,
+                            "First frame pixel bytes (expect BGR order)"
+                        );
                     }
+                    if try_send_egfx_frame(
+                        self.egfx.as_ref(),
+                        &mut self.encoder,
+                        &mut self.encoder_width,
+                        &mut self.encoder_height,
+                        &mut self.frame_timestamp_ms,
+                        &frame,
+                    ) {
+                        continue;
+                    }
+                    let bitmap = frame_to_bitmap(frame)?;
+                    return Ok(Some(DisplayUpdate::Bitmap(bitmap)));
                 }
-                size = resize_rx.recv() => {
-                    let Some(new_size) = size else {
-                        return Ok(None);
-                    };
-                    tracing::info!(
-                        width = new_size.width,
-                        height = new_size.height,
-                        "Emitting display resize"
-                    );
-                    // Also resize the EGFX surface if active.
-                    if let Some(ref egfx) = *egfx {
-                        egfx.resize(new_size.width, new_size.height);
+                CaptureEvent::Cursor(cursor) => {
+                    return Ok(Some(cursor_to_display_update(&cursor)));
+                }
+                CaptureEvent::FrameAndCursor(mut frame, cursor) => {
+                    self.pending_cursor = Some(cursor);
+                    frame.ensure_alpha_opaque();
+                    if try_send_egfx_frame(
+                        self.egfx.as_ref(),
+                        &mut self.encoder,
+                        &mut self.encoder_width,
+                        &mut self.encoder_height,
+                        &mut self.frame_timestamp_ms,
+                        &frame,
+                    ) {
+                        continue;
                     }
-                    return Ok(Some(DisplayUpdate::Resize(new_size)));
+                    let bitmap = frame_to_bitmap(frame)?;
+                    return Ok(Some(DisplayUpdate::Bitmap(bitmap)));
                 }
             }
         }
@@ -471,12 +482,14 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
 /// bitmap delivery), `false` if EGFX is not ready and bitmap fallback
 /// should be used.
 ///
-/// This is a free function to avoid borrow-checker conflicts with the
-/// `tokio::select!` macro holding `&mut event_rx` across the call.
+/// Detects frame dimension changes (from `PipeWire` resolution changes or
+/// EGFX resize) and recreates the encoder to match.
 #[allow(clippy::cast_possible_truncation)]
 fn try_send_egfx_frame(
     egfx: Option<&EgfxController>,
     h264_encoder: &mut Option<GstEncoder>,
+    encoder_width: &mut u32,
+    encoder_height: &mut u32,
     timestamp_ms: &mut u32,
     frame: &CapturedFrame,
 ) -> bool {
@@ -488,7 +501,23 @@ fn try_send_egfx_frame(
         return false;
     }
 
-    // Lazily initialize the H.264 encoder on the first EGFX frame.
+    // Detect frame dimension change: drop encoder so it gets recreated
+    // at the new size. This handles both client-initiated resize (via
+    // EGFX ResetGraphics in request_layout) and PipeWire resolution changes.
+    if h264_encoder.is_some() && (frame.width != *encoder_width || frame.height != *encoder_height) {
+        tracing::info!(
+            old_width = *encoder_width, old_height = *encoder_height,
+            new_width = frame.width, new_height = frame.height,
+            "EGFX: frame dimensions changed, recreating encoder"
+        );
+        *h264_encoder = None;
+
+        // Ensure the EGFX surface matches the new frame dimensions.
+        egfx.resize(frame.width as u16, frame.height as u16);
+    }
+
+    // Lazily initialize the H.264 encoder on the first EGFX frame or
+    // after a dimension change.
     if h264_encoder.is_none() {
         let config = EncoderConfig {
             width: frame.width,
@@ -503,6 +532,13 @@ fn try_send_egfx_frame(
                     encoder_type = %enc.encoder_type(),
                     "EGFX: H.264 encoder initialized"
                 );
+                // Force a keyframe if EGFX was resized, ensuring the
+                // client can decode immediately after surface recreation.
+                if egfx.take_needs_keyframe() {
+                    enc.force_keyframe();
+                }
+                *encoder_width = frame.width;
+                *encoder_height = frame.height;
                 *h264_encoder = Some(enc);
             }
             Err(e) => {
@@ -619,6 +655,7 @@ pub fn build_server(
     auth: Option<&AuthCredentials>,
     cliprdr: Option<Box<dyn CliprdrServerFactory>>,
     sound: Option<Box<dyn SoundServerFactory>>,
+    egfx_bridge: Option<Box<dyn ironrdp_dvc::DvcProcessor>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
@@ -629,6 +666,9 @@ pub fn build_server(
         .with_sound_factory(sound)
         .build();
     apply_credentials(&mut server, auth);
+    if let Some(bridge) = egfx_bridge {
+        server.add_dvc_processor(bridge);
+    }
     server
 }
 

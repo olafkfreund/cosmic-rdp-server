@@ -310,6 +310,21 @@ fn process_frame(
     // Check if PipeWire negotiated an RGB-order format (RGBx or RGBA).
     // The RDP server expects BGRA, so swap R and B channels if needed.
     let fmt = negotiated_format.load(Ordering::Relaxed);
+
+    // Log raw pixel bytes on the first frame to diagnose color channel order.
+    if sequence == 0 && frame_data.len() >= 12 {
+        tracing::info!(
+            spa_format_id = fmt,
+            bgrx_id = pw::spa::param::video::VideoFormat::BGRx.as_raw(),
+            rgbx_id = pw::spa::param::video::VideoFormat::RGBx.as_raw(),
+            raw_pixel_0 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
+                frame_data[0], frame_data[1], frame_data[2], frame_data[3]),
+            raw_pixel_1 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
+                frame_data[4], frame_data[5], frame_data[6], frame_data[7]),
+            "PipeWire first frame: raw pixels BEFORE any swap"
+        );
+    }
+
     let is_rgb_order = fmt == pw::spa::param::video::VideoFormat::RGBx.as_raw()
         || fmt == pw::spa::param::video::VideoFormat::RGBA.as_raw();
     if is_rgb_order {
