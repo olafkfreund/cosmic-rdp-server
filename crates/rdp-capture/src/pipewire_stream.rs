@@ -1,5 +1,5 @@
 use std::os::fd::OwnedFd;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use pipewire as pw;
@@ -98,6 +98,12 @@ fn run_pipewire_loop(
     .map_err(|_| PwError::CreateStream)?;
 
     let seq = Arc::new(AtomicU64::new(0));
+    // Track the negotiated pixel format (SPA_VIDEO_FORMAT_* value).
+    // Default to BGRx since that's our preferred format.
+    let negotiated_format = Arc::new(AtomicU32::new(
+        pw::spa::param::video::VideoFormat::BGRx.as_raw(),
+    ));
+    let negotiated_format_cb = Arc::clone(&negotiated_format);
 
     let _listener = stream
         .add_local_listener_with_user_data(frame_tx)
@@ -107,8 +113,26 @@ fn run_pipewire_loop(
                 tracing::error!("PipeWire stream entered error state");
             }
         })
+        .param_changed(move |_stream, _tx, id, pod| {
+            if id != pw::spa::param::ParamType::Format.as_raw() {
+                return;
+            }
+            if let Some(pod) = pod {
+                // Parse the format pod to extract the negotiated video format.
+                if let Ok((_, pw::spa::pod::Value::Object(obj))) = pw::spa::pod::deserialize::PodDeserializer::deserialize_any_from(pod.as_bytes()) {
+                    for prop in &obj.properties {
+                        if prop.key == pw::spa::param::format::FormatProperties::VideoFormat.as_raw() {
+                            if let pw::spa::pod::Value::Id(fmt_id) = prop.value {
+                                negotiated_format_cb.store(fmt_id.0, Ordering::SeqCst);
+                                tracing::info!(format_id = fmt_id.0, "PipeWire negotiated video format");
+                            }
+                        }
+                    }
+                }
+            }
+        })
         .process(move |stream_ref, tx| {
-            process_frame(stream_ref, tx, &seq);
+            process_frame(stream_ref, tx, &seq, &negotiated_format);
         })
         .register()
         .map_err(|_| PwError::RegisterListener)?;
@@ -203,6 +227,7 @@ fn process_frame(
     stream: &pw::stream::StreamRef,
     tx: &mut mpsc::Sender<CaptureEvent>,
     seq: &AtomicU64,
+    negotiated_format: &AtomicU32,
 ) {
     // Dequeue buffer using raw API for SPA metadata access.
     // Safety: stream is valid within the process callback.
@@ -276,11 +301,22 @@ fn process_frame(
     }
 
     // Copy pixel data before returning the buffer to PipeWire.
-    let frame_data = slice[offset..end].to_vec();
+    let mut frame_data = slice[offset..end].to_vec();
     let sequence = seq.fetch_add(1, Ordering::Relaxed);
 
     // Safety: we've finished reading from the buffer, return it to PipeWire.
     unsafe { stream.queue_raw_buffer(raw_pw_buf) };
+
+    // Check if PipeWire negotiated an RGB-order format (RGBx or RGBA).
+    // The RDP server expects BGRA, so swap R and B channels if needed.
+    let fmt = negotiated_format.load(Ordering::Relaxed);
+    let is_rgb_order = fmt == pw::spa::param::video::VideoFormat::RGBx.as_raw()
+        || fmt == pw::spa::param::video::VideoFormat::RGBA.as_raw();
+    if is_rgb_order {
+        for pixel in frame_data.chunks_exact_mut(4) {
+            pixel.swap(0, 2); // R,G,B,A -> B,G,R,A
+        }
+    }
 
     let frame = CapturedFrame {
         data: frame_data,

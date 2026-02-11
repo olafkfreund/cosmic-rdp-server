@@ -99,6 +99,10 @@ impl DvcProcessor for EgfxBridge {
         let was_ready = inner.ready;
         let mut messages = inner.server.process(channel_id, payload)?;
 
+        // Sync our ready flag from the server's internal state.
+        inner.ready = inner.server.is_ready();
+        inner.supports_avc420 = inner.ready; // V8_1 with AVC420 was negotiated if ready
+
         // On readiness transition: auto-create surface and map to output.
         if !was_ready && inner.ready && inner.surface_id.is_none() {
             let width = inner.width;

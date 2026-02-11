@@ -241,6 +241,7 @@ fn create_blue_bitmap(width: u16, height: u16) -> BitmapUpdate {
 struct DisplayChannels {
     event_rx: Option<mpsc::Receiver<CaptureEvent>>,
     resize_rx: Option<mpsc::Receiver<DesktopSize>>,
+    egfx: Option<EgfxController>,
 }
 
 /// Display that streams live screen capture frames via `PipeWire` and
@@ -273,6 +274,7 @@ impl LiveDisplay {
             channels: Arc::new(std::sync::Mutex::new(DisplayChannels {
                 event_rx: Some(event_rx),
                 resize_rx: Some(resize_rx),
+                egfx: None,
             })),
             resize_tx,
             egfx: None,
@@ -307,6 +309,10 @@ impl RdpServerDisplay for LiveDisplay {
             .take()
             .ok_or_else(|| anyhow::anyhow!("resize channel already taken"))?;
 
+        // Take EGFX controller: first from channels (returned by previous
+        // connection), then from self (first connection only).
+        let egfx = channels.egfx.take().or_else(|| self.egfx.take());
+
         tracing::info!("Display channels acquired for new connection");
 
         Ok(Box::new(LiveDisplayUpdates {
@@ -314,7 +320,7 @@ impl RdpServerDisplay for LiveDisplay {
             resize_rx: Some(resize_rx),
             channels: Arc::clone(&self.channels),
             pending_cursor: None,
-            egfx: self.egfx.take(),
+            egfx,
             encoder: None,
             frame_timestamp_ms: 0,
         }))
@@ -374,6 +380,7 @@ impl Drop for LiveDisplayUpdates {
         let mut channels = self.channels.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         channels.event_rx = self.event_rx.take();
         channels.resize_rx = self.resize_rx.take();
+        channels.egfx = self.egfx.take();
         // Drop the encoder to release GStreamer resources.
         self.encoder = None;
         tracing::info!("Client disconnected, display channels released for next connection");
