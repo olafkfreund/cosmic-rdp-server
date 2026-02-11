@@ -1,6 +1,6 @@
 //! `GStreamer` H.264 encoding pipeline.
 //!
-//! Pipeline: `appsrc ! videoconvert ! capsfilter(I420,BT.709-full) ! encoder ! h264parse ! appsink`
+//! Pipeline: `appsrc ! videoconvert ! capsfilter(I420,BT.601-limited) ! encoder ! h264parse ! appsink`
 //!
 //! Supports hardware-accelerated encoding via VAAPI (Intel/AMD) and
 //! NVENC (NVIDIA), with automatic fallback to x264 software encoding.
@@ -73,7 +73,7 @@ pub fn detect_best_encoder() -> EncoderType {
 /// H.264 encoder using a `GStreamer` pipeline.
 ///
 /// Creates and manages the pipeline:
-/// `appsrc ! videoconvert ! capsfilter(I420,BT.709 full) ! encoder ! h264parse ! appsink`
+/// `appsrc ! videoconvert ! capsfilter(I420,BT.601 limited) ! encoder ! h264parse ! appsink`
 ///
 /// Push raw BGRx/BGRA frames via [`encode_frame`](GstEncoder::encode_frame)
 /// and receive H.264 NAL units in byte-stream format.
@@ -308,7 +308,7 @@ impl Drop for GstEncoder {
 
 /// Build the `GStreamer` encoding pipeline.
 ///
-/// `appsrc ! videoconvert ! capsfilter(I420,BT.709-full) ! encoder ! h264parse ! appsink`
+/// `appsrc ! videoconvert ! capsfilter(I420,BT.601-limited) ! encoder ! h264parse ! appsink`
 fn build_pipeline(
     config: &EncoderConfig,
     encoder_type: EncoderType,
@@ -344,17 +344,18 @@ fn build_pipeline(
     // videoconvert: RGB→YUV color space conversion.
     let videoconvert = make_element("videoconvert", "convert")?;
 
-    // Capsfilter: force I420 with BT.709 full-range colorimetry.
+    // Capsfilter: force I420 with BT.601 limited-range colorimetry.
     //
-    // FreeRDP's prim_YUV.c decodes using BT.709 full-range coefficients
-    // (Y used directly, no Y-16 offset). We must match this exactly:
-    //   colorimetry = 1:3:5:1 = full-range : BT709 matrix : BT709 transfer : BT709 primaries
+    // FreeRDP hardcodes BT.601 limited-range coefficients for AVC420
+    // H.264 decode (prim_YUV.c) and ignores H.264 VUI flags entirely.
+    // XRDP also uses BT.601 limited-range with x264.  We MUST match:
+    //   "bt601" = 2:1:4:6 = limited : BT601 matrix : BT601 transfer : SMPTE170M primaries
     let capsfilter = make_element("capsfilter", "filter")?;
     capsfilter.set_property(
         "caps",
         gst::Caps::builder("video/x-raw")
             .field("format", "I420")
-            .field("colorimetry", "1:3:5:1")
+            .field("colorimetry", "bt601")
             .build(),
     );
 
@@ -376,7 +377,7 @@ fn build_pipeline(
         )
         .build();
 
-    // Pipeline: appsrc(BGRx) ! videoconvert ! capsfilter(I420 BT.709-full) ! encoder ! h264parse ! appsink
+    // Pipeline: appsrc(BGRx) ! videoconvert ! capsfilter(I420 BT.601-limited) ! encoder ! h264parse ! appsink
     pipeline
         .add_many([
             appsrc.upcast_ref(),
@@ -451,11 +452,12 @@ fn configure_encoder(encoder: &gst::Element, encoder_type: EncoderType, config: 
                 encoder.set_property_from_str("tune", "zerolatency");
                 encoder.set_property_from_str("speed-preset", "ultrafast");
             }
-            // Signal BT.709 full-range in H.264 SPS VUI to match FreeRDP's
-            // prim_YUV decode (BT.709, no Y-16 offset = full range).
+            // Signal BT.601 limited-range in H.264 SPS VUI.
+            // FreeRDP ignores VUI but this keeps metadata consistent
+            // with the actual BT.601 limited-range encoding.
             encoder.set_property_from_str(
                 "option-string",
-                "fullrange=on:colorprim=bt709:transfer=bt709:colormatrix=bt709",
+                "colorprim=bt601:transfer=bt601:colormatrix=bt601",
             );
         }
     }
