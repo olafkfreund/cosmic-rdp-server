@@ -283,16 +283,14 @@ fn build_pipeline(
 
     // AppSrc: raw video input from PipeWire.
     //
-    // PipeWire delivers BGRx data (memory: [B, G, R, x]). We declare
-    // the format as RGBx to compensate for FreeRDP's AVC420 decoder
-    // which outputs decoded YUV→RGB into RGBX byte order rather than
-    // BGRX. This pre-swaps R↔B during encoding so the decoder's swap
-    // cancels it out, producing correct colors on the client.
+    // PipeWire delivers BGRx data (memory: [B, G, R, x]). No colorimetry
+    // is set on the RGB input — videoconvert will use the output
+    // capsfilter's colorimetry to determine the RGB→YUV matrix.
     let appsrc = gst_app::AppSrc::builder()
         .name("source")
         .caps(
             &gst::Caps::builder("video/x-raw")
-                .field("format", "RGBx")
+                .field("format", "BGRx")
                 .field("width", width)
                 .field("height", height)
                 .field("framerate", gst::Fraction::new(framerate, 1))
