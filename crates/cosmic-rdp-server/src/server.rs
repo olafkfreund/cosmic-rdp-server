@@ -318,6 +318,7 @@ impl RdpServerDisplay for LiveDisplay {
             encoder_width: 0,
             encoder_height: 0,
             frame_timestamp_ms: 0,
+            egfx_wait_frames: 0,
         }))
     }
 
@@ -392,6 +393,10 @@ struct LiveDisplayUpdates {
     encoder_height: u32,
     /// Frame timestamp counter (milliseconds), monotonically increasing.
     frame_timestamp_ms: u32,
+    /// Frames skipped while waiting for EGFX to become ready.
+    /// After a timeout, fall back to bitmap delivery even if EGFX never
+    /// negotiates (e.g. client connected with /gfx:off).
+    egfx_wait_frames: u32,
 }
 
 impl Drop for LiveDisplayUpdates {
@@ -424,21 +429,6 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
             match event {
                 CaptureEvent::Frame(mut frame) => {
                     frame.ensure_alpha_opaque();
-                    // Log first pixel bytes once to diagnose color channel order.
-                    if frame.sequence == 0 && frame.data.len() >= 12 {
-                        tracing::info!(
-                            pixel_0 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
-                                frame.data[0], frame.data[1], frame.data[2], frame.data[3]),
-                            pixel_1 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
-                                frame.data[4], frame.data[5], frame.data[6], frame.data[7]),
-                            pixel_2 = format_args!("[{:#04x},{:#04x},{:#04x},{:#04x}]",
-                                frame.data[8], frame.data[9], frame.data[10], frame.data[11]),
-                            width = frame.width,
-                            height = frame.height,
-                            format = ?frame.format,
-                            "First frame pixel bytes (expect BGR order)"
-                        );
-                    }
                     if try_send_egfx_frame(
                         self.egfx.as_ref(),
                         &mut self.encoder,
@@ -447,6 +437,22 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
                         &mut self.frame_timestamp_ms,
                         &frame,
                     ) {
+                        continue;
+                    }
+                    // When EGFX is configured, skip bitmap fallback while the
+                    // DVC channel is still negotiating. Sending bitmaps at the
+                    // capture resolution (e.g. 1920x1080) crashes FreeRDP if
+                    // the client's desktop is smaller (e.g. 1662x860):
+                    //   "Invalid surface bits command rectangle does not fit"
+                    // After ~300 frames (~10s at 30fps) fall back to bitmap
+                    // for clients that don't support EGFX.
+                    if self.egfx.is_some() && self.egfx_wait_frames < 300 {
+                        self.egfx_wait_frames += 1;
+                        if self.egfx_wait_frames == 1 {
+                            tracing::info!(
+                                "EGFX not yet ready, suppressing bitmap fallback"
+                            );
+                        }
                         continue;
                     }
                     let bitmap = frame_to_bitmap(frame)?;
@@ -466,6 +472,10 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
                         &mut self.frame_timestamp_ms,
                         &frame,
                     ) {
+                        continue;
+                    }
+                    if self.egfx.is_some() && self.egfx_wait_frames < 300 {
+                        self.egfx_wait_frames += 1;
                         continue;
                     }
                     let bitmap = frame_to_bitmap(frame)?;
