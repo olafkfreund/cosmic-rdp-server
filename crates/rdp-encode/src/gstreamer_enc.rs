@@ -206,21 +206,27 @@ impl GstEncoder {
             }
         }
 
-        // Log negotiated caps once after first buffer push, when GStreamer
-        // has actually performed caps negotiation (caps are None at start()).
+        // Log negotiated caps once after GStreamer has performed caps
+        // negotiation. Caps may not be available until after the first
+        // encoded frame is pulled, so only mark as logged when we
+        // actually see caps (retry on subsequent frames otherwise).
         if !self.caps_logged {
-            self.caps_logged = true;
             if let Some(convert) = self.pipeline.by_name("convert") {
-                if let Some(caps) = convert.static_pad("sink").and_then(|p| p.current_caps()) {
-                    tracing::info!(%caps, "videoconvert input caps (negotiated)");
-                }
-                if let Some(caps) = convert.static_pad("src").and_then(|p| p.current_caps()) {
-                    tracing::info!(%caps, "videoconvert output caps (negotiated)");
-                }
-            }
-            if let Some(enc) = self.pipeline.by_name("encoder") {
-                if let Some(caps) = enc.static_pad("sink").and_then(|p| p.current_caps()) {
-                    tracing::info!(%caps, "encoder input caps (negotiated)");
+                let sink_caps = convert.static_pad("sink").and_then(|p| p.current_caps());
+                let src_caps = convert.static_pad("src").and_then(|p| p.current_caps());
+                if sink_caps.is_some() || src_caps.is_some() {
+                    self.caps_logged = true;
+                    if let Some(caps) = sink_caps {
+                        tracing::info!(%caps, "videoconvert input caps (negotiated)");
+                    }
+                    if let Some(caps) = src_caps {
+                        tracing::info!(%caps, "videoconvert output caps (negotiated)");
+                    }
+                    if let Some(enc) = self.pipeline.by_name("encoder") {
+                        if let Some(caps) = enc.static_pad("sink").and_then(|p| p.current_caps()) {
+                            tracing::info!(%caps, "encoder input caps (negotiated)");
+                        }
+                    }
                 }
             }
         }
