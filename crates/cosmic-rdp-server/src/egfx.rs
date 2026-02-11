@@ -22,7 +22,7 @@
 use std::sync::{Arc, Mutex};
 
 use ironrdp_core::{encode_vec, impl_as_any, Encode, WriteCursor};
-use ironrdp_dvc::{DvcEncode, DvcMessage, DvcProcessor, DvcServerProcessor};
+use ironrdp_dvc::{DvcEncode, DvcMessage, DvcProcessor, DvcProcessorFactory, DvcServerProcessor};
 use ironrdp_egfx::pdu::{Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};
 use ironrdp_egfx::server::{GraphicsPipelineHandler, GraphicsPipelineServer};
 use ironrdp_pdu::PduResult;
@@ -225,8 +225,11 @@ impl EgfxController {
     /// EGFX handshake starts fresh.
     pub fn reset(&self) {
         let mut inner = lock_shared(&self.shared);
+        // Create a fresh pipeline server to avoid stale surfaces/frame IDs.
+        inner.server = GraphicsPipelineServer::new(Box::new(ReadyDetectHandler));
         inner.ready = false;
         inner.surface_id = None;
+        inner.dvc_channel_id = None;
         inner.supports_avc420 = false;
         inner.needs_keyframe = false;
         tracing::debug!("EGFX: state reset for new connection");
@@ -393,22 +396,47 @@ impl EgfxEventSetter {
     }
 }
 
+// --------------- Bridge Factory ---------------
+
+/// Factory that creates fresh [`EgfxBridge`] instances per RDP connection.
+///
+/// All bridges share the same `SharedEgfx` state (which is reset by
+/// [`EgfxController::reset()`] between connections), allowing the
+/// [`EgfxController`] and [`EgfxEventSetter`] to remain valid.
+pub struct EgfxBridgeFactory {
+    shared: SharedEgfx,
+}
+
+impl DvcProcessorFactory for EgfxBridgeFactory {
+    fn build(&self) -> Box<dyn DvcProcessor> {
+        tracing::debug!("EGFX: creating fresh bridge for new connection");
+        Box::new(EgfxBridge {
+            shared: Arc::clone(&self.shared),
+        })
+    }
+
+    #[allow(clippy::unnecessary_literal_bound)]
+    fn channel_name(&self) -> &str {
+        "Microsoft::Windows::RDS::Graphics"
+    }
+}
+
 // --------------- Factory ---------------
 
 /// Create the EGFX components.
 ///
 /// Returns:
-/// - A boxed `DvcProcessor` to register with `DrdynvcServer`
+/// - An `EgfxBridgeFactory` to register with `RdpServer::add_dvc_factory`
 /// - An `EgfxController` for the display handler to send frames
 /// - An `EgfxEventSetter` to inject the server event sender after construction
 ///
-/// The handler callbacks (readiness, frame acks) are minimal — the bridge
-/// detects readiness by checking `server.is_ready()` after each `process()`
-/// call, avoiding circular `Arc<Mutex<>>` references.
+/// The factory creates a fresh [`EgfxBridge`] for each RDP connection,
+/// solving the issue where `drain(..)` in `attach_channels` consumed the
+/// bridge after the first connection.
 pub fn create_egfx(
     width: u16,
     height: u16,
-) -> (Box<dyn DvcProcessor>, EgfxController, EgfxEventSetter) {
+) -> (EgfxBridgeFactory, EgfxController, EgfxEventSetter) {
     let server = GraphicsPipelineServer::new(Box::new(ReadyDetectHandler));
 
     let shared: SharedEgfx = Arc::new(Mutex::new(EgfxInner {
@@ -423,7 +451,7 @@ pub fn create_egfx(
         needs_keyframe: false,
     }));
 
-    let bridge = EgfxBridge {
+    let factory = EgfxBridgeFactory {
         shared: Arc::clone(&shared),
     };
 
@@ -433,7 +461,7 @@ pub fn create_egfx(
 
     let event_setter = EgfxEventSetter { shared };
 
-    (Box::new(bridge), controller, event_setter)
+    (factory, controller, event_setter)
 }
 
 /// Minimal handler that does nothing — readiness is detected by the
@@ -459,10 +487,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn create_egfx_returns_bridge_and_controller() {
-        let (bridge, controller, _setter) = create_egfx(1920, 1080);
+    fn create_egfx_returns_factory_and_controller() {
+        let (factory, controller, _setter) = create_egfx(1920, 1080);
+        let bridge = factory.build();
         assert_eq!(bridge.channel_name(), "Microsoft::Windows::RDS::Graphics");
         assert!(!controller.is_ready());
         assert!(!controller.supports_avc420());
+
+        // Factory can create multiple bridges (one per connection).
+        let bridge2 = factory.build();
+        assert_eq!(bridge2.channel_name(), "Microsoft::Windows::RDS::Graphics");
     }
 }

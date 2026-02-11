@@ -316,7 +316,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot 0.12.5",
  "percent-encoding",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
  "x11rb",
 ]
 
@@ -2002,7 +2002,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2239,7 +2239,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4035,7 +4035,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-acceptor"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-async",
  "ironrdp-connector",
@@ -4048,7 +4048,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-ainput"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4060,7 +4060,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-async"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bytes",
  "ironrdp-connector",
@@ -4072,7 +4072,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-cliprdr"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4084,7 +4084,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-connector"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-core",
  "ironrdp-error",
@@ -4102,7 +4102,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-core"
 version = "0.1.5"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-error",
 ]
@@ -4110,7 +4110,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-displaycontrol"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-core",
  "ironrdp-dvc",
@@ -4122,7 +4122,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-dvc"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-core",
  "ironrdp-pdu",
@@ -4134,7 +4134,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-egfx"
 version = "0.1.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bit_field",
  "bitflags 2.10.0",
@@ -4148,12 +4148,12 @@ dependencies = [
 [[package]]
 name = "ironrdp-error"
 version = "0.1.3"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 
 [[package]]
 name = "ironrdp-graphics"
 version = "0.7.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bit_field",
  "bitflags 2.10.0",
@@ -4169,7 +4169,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-pdu"
 version = "0.7.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bit_field",
  "bitflags 2.10.0",
@@ -4192,7 +4192,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-rdpsnd"
 version = "0.7.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4204,7 +4204,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-server"
 version = "0.10.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4234,7 +4234,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-svc"
 version = "0.6.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4244,7 +4244,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-tokio"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#4cec150dfefe3efd115e835759b9b0cbcc457cce"
+source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bytes",
  "ironrdp-async",
@@ -4392,7 +4392,7 @@ version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d463f34ca3c400fde3a054da0e0b8c6ffa21e4590922f3e18281bb5eeef4cbdc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4995,7 +4995,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6810,7 +6810,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7714,7 +7714,7 @@ dependencies = [
  "getrandom 0.4.1",
  "once_cell",
  "rustix 1.1.3",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8913,7 +8913,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

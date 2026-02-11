@@ -665,7 +665,7 @@ pub fn build_server(
     auth: Option<&AuthCredentials>,
     cliprdr: Option<Box<dyn CliprdrServerFactory>>,
     sound: Option<Box<dyn SoundServerFactory>>,
-    egfx_bridge: Option<Box<dyn ironrdp_dvc::DvcProcessor>>,
+    egfx_factory: Option<Box<dyn ironrdp_dvc::DvcProcessorFactory>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
@@ -676,16 +676,17 @@ pub fn build_server(
         .with_sound_factory(sound)
         .build();
     apply_credentials(&mut server, auth);
-    if let Some(bridge) = egfx_bridge {
-        server.add_dvc_processor(bridge);
+    if let Some(factory) = egfx_factory {
+        server.add_dvc_factory(factory);
     }
     server
 }
 
 /// Build an RDP server with live screen capture and input injection.
 ///
-/// If `egfx_bridge` is provided, it is registered as a DVC processor for
-/// EGFX/H.264 frame delivery through the DRDYNVC channel.
+/// If `egfx_factory` is provided, it is registered as a DVC processor factory
+/// for EGFX/H.264 frame delivery through the DRDYNVC channel. A fresh
+/// processor is created for each RDP connection.
 #[allow(clippy::too_many_arguments)]
 pub fn build_live_server(
     bind_addr: std::net::SocketAddr,
@@ -695,7 +696,7 @@ pub fn build_live_server(
     input_handler: LiveInputHandler,
     cliprdr: Option<Box<dyn CliprdrServerFactory>>,
     sound: Option<Box<dyn SoundServerFactory>>,
-    egfx_bridge: Option<Box<dyn ironrdp_dvc::DvcProcessor>>,
+    egfx_factory: Option<Box<dyn ironrdp_dvc::DvcProcessorFactory>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
@@ -706,8 +707,8 @@ pub fn build_live_server(
         .with_sound_factory(sound)
         .build();
     apply_credentials(&mut server, auth);
-    if let Some(bridge) = egfx_bridge {
-        server.add_dvc_processor(bridge);
+    if let Some(factory) = egfx_factory {
+        server.add_dvc_factory(factory);
     }
     server
 }
