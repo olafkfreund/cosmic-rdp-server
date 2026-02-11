@@ -283,14 +283,20 @@ fn build_pipeline(
 
     // AppSrc: raw video input from PipeWire.
     //
-    // PipeWire delivers BGRx data (memory: [B, G, R, x]). No colorimetry
-    // is set on the RGB input — videoconvert will use the output
-    // capsfilter's colorimetry to determine the RGB→YUV matrix.
+    // PipeWire delivers BGRx data (memory: [B, G, R, x]), but we declare
+    // `RGBx` to GStreamer. This intentionally swaps the R↔B interpretation
+    // during RGB→YUV conversion, compensating for the R↔B inversion that
+    // FreeRDP's SSE2-optimized YUV→RGB decode path (prim_YUV_opt.c)
+    // introduces when reconstructing pixels for BGRX surfaces.
+    //
+    // Without this swap, both xfreerdp and Remmina display H.264/EGFX
+    // frames with inverted red and blue channels (bitmap fallback is
+    // unaffected because it bypasses the YUV encode/decode chain).
     let appsrc = gst_app::AppSrc::builder()
         .name("source")
         .caps(
             &gst::Caps::builder("video/x-raw")
-                .field("format", "BGRx")
+                .field("format", "RGBx")
                 .field("width", width)
                 .field("height", height)
                 .field("framerate", gst::Fraction::new(framerate, 1))
@@ -301,7 +307,7 @@ fn build_pipeline(
         .do_timestamp(true)
         .build();
 
-    // videoconvert: RGB→YUV color space conversion (BGRx → I420).
+    // videoconvert: RGB→YUV color space conversion (RGBx → I420).
     let videoconvert = make_element("videoconvert", "convert")?;
 
     // Capsfilter: force I420 with BT.709 limited-range colorimetry.
@@ -341,7 +347,7 @@ fn build_pipeline(
         )
         .build();
 
-    // Pipeline: appsrc(BGRx) ! videoconvert ! capsfilter(I420 BT.709 full) ! encoder ! h264parse ! appsink
+    // Pipeline: appsrc(RGBx) ! videoconvert ! capsfilter(I420 BT.709 limited) ! encoder ! h264parse ! appsink
     pipeline
         .add_many([
             appsrc.upcast_ref(),
