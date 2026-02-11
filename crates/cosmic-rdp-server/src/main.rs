@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
+use rdp_encode::{EncoderConfig, GstEncoder};
 
 mod clipboard;
 mod config;
@@ -110,14 +111,19 @@ async fn main() -> Result<()> {
         dbus_state.set_status(rdp_dbus::types::ServerStatus::Running).await;
 
         let result = if cfg.static_display {
-            tracing::info!("Using static blue screen display");
-            let (egfx_factory, _egfx_controller, egfx_event_setter) =
+            tracing::info!("Using static display with EGFX color test pattern");
+            let (egfx_factory, egfx_controller, egfx_event_setter) =
                 egfx::create_egfx(1920, 1080);
             let rdp_server = server::build_server(
                 cfg.bind, &tls_ctx, auth.as_ref(), make_cliprdr(), make_sound(),
                 Some(Box::new(egfx_factory)),
             );
             egfx_event_setter.set_event_sender(rdp_server.event_sender().clone());
+            // Spawn background H.264 encoding task that sends a color test
+            // pattern (RGBW quadrants) via EGFX when the client negotiates
+            // AVC420. This allows testing the full encode→decode color
+            // pipeline without needing live screen capture.
+            tokio::spawn(static_egfx_task(egfx_controller, 1920, 1080));
             run_with_shutdown(rdp_server, &mut dbus_cmd_rx).await
         } else {
             run_live_or_fallback(
@@ -358,6 +364,124 @@ fn load_restore_token() -> Option<String> {
     }
     tracing::info!(path = %path.display(), "Loaded ScreenCast restore token");
     Some(token.to_string())
+}
+
+/// Run a background H.264 encoding loop for static display testing.
+///
+/// Generates a color test pattern (RGBW quadrants) and continuously
+/// encodes it as H.264 frames through the EGFX channel. This allows
+/// testing the full encode→decode color pipeline without live capture.
+///
+/// The client will first see the blue bitmap from [`StaticDisplay`], then
+/// switch to the RGBW test pattern once EGFX AVC420 negotiates (~1-2s).
+async fn static_egfx_task(
+    controller: egfx::EgfxController,
+    width: u16,
+    height: u16,
+) {
+    // Wait for EGFX to become ready (client must negotiate AVC420).
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if controller.is_ready() && controller.supports_avc420() {
+            break;
+        }
+    }
+
+    tracing::info!(width, height, "Static EGFX: channel ready, starting H.264 test pattern");
+
+    let config = EncoderConfig {
+        width: u32::from(width),
+        height: u32::from(height),
+        ..EncoderConfig::default()
+    };
+
+    let mut encoder = match GstEncoder::new(&config) {
+        Ok(enc) => {
+            tracing::info!(encoder_type = %enc.encoder_type(), "Static EGFX: encoder created");
+            enc
+        }
+        Err(e) => {
+            tracing::error!("Static EGFX: failed to create encoder: {e}");
+            return;
+        }
+    };
+
+    let frame_data = create_color_test_pattern(width, height);
+    let mut timestamp_ms: u32 = 0;
+    let mut sent_count: u32 = 0;
+
+    loop {
+        match encoder.encode_frame(&frame_data) {
+            Ok(Some(h264_frame)) => {
+                if controller.send_frame(&h264_frame.data, width, height, timestamp_ms) {
+                    sent_count += 1;
+                    if sent_count <= 5 {
+                        tracing::info!(
+                            sent_count,
+                            h264_size = h264_frame.data.len(),
+                            is_keyframe = h264_frame.is_keyframe,
+                            "Static EGFX: sent H.264 frame"
+                        );
+                    }
+                }
+                timestamp_ms = timestamp_ms.wrapping_add(500);
+            }
+            Ok(None) => {
+                // Encoder is buffering, try again quickly.
+            }
+            Err(e) => {
+                tracing::warn!("Static EGFX: encode error: {e}");
+                return;
+            }
+        }
+        // 2 fps is plenty for a static test pattern.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}
+
+/// Create a color test pattern with RGBW quadrants for visual color verification.
+///
+/// Layout (BGRA pixel data):
+/// ```text
+/// ┌──────────┬──────────┐
+/// │  RED     │  GREEN   │
+/// │          │          │
+/// ├──────────┼──────────┤
+/// │  BLUE    │  WHITE   │
+/// │          │          │
+/// └──────────┴──────────┘
+/// ```
+///
+/// If any color channel is swapped in the H.264 encode→decode pipeline, it
+/// will be immediately visible (e.g. red quadrant appearing blue).
+fn create_color_test_pattern(width: u16, height: u16) -> Vec<u8> {
+    let w = usize::from(width);
+    let h = usize::from(height);
+    let bpp = 4;
+    let mut data = vec![0u8; w * h * bpp];
+    let half_w = w / 2;
+    let half_h = h / 2;
+
+    for y in 0..h {
+        for x in 0..w {
+            let offset = (y * w + x) * bpp;
+            // BGRx format: [B, G, R, x]
+            let pixel: [u8; 4] = if y < half_h {
+                if x < half_w {
+                    [0x00, 0x00, 0xFF, 0xFF] // Red (B=0, G=0, R=255)
+                } else {
+                    [0x00, 0xFF, 0x00, 0xFF] // Green (B=0, G=255, R=0)
+                }
+            } else if x < half_w {
+                [0xFF, 0x00, 0x00, 0xFF] // Blue (B=255, G=0, R=0)
+            } else {
+                [0xFF, 0xFF, 0xFF, 0xFF] // White
+            };
+            data[offset..offset + bpp].copy_from_slice(&pixel);
+        }
+    }
+
+    data
 }
 
 /// Save the `ScreenCast` portal restore token for future service restarts.
