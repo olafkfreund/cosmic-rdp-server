@@ -251,7 +251,7 @@ mod tests {
             metas: std::ptr::null_mut(),
             datas: std::ptr::null_mut(),
         };
-        let result = unsafe { extract_damage(&buffer) };
+        let result = unsafe { extract_damage(&raw const buffer) };
         assert!(result.is_none());
     }
 
@@ -266,11 +266,11 @@ mod tests {
         let buffer = spa_sys::spa_buffer {
             n_metas: 1,
             n_datas: 0,
-            metas: &mut meta,
+            metas: &raw mut meta,
             datas: std::ptr::null_mut(),
         };
 
-        let result = unsafe { extract_damage(&buffer) };
+        let result = unsafe { extract_damage(&raw const buffer) };
         assert!(result.is_none());
     }
 
@@ -309,6 +309,7 @@ mod tests {
 
         let mut meta = spa_sys::spa_meta {
             type_: spa_sys::SPA_META_VideoDamage,
+            #[allow(clippy::cast_possible_truncation)]
             size: std::mem::size_of_val(&regions) as u32,
             data: regions.as_ptr().cast_mut().cast::<std::os::raw::c_void>(),
         };
@@ -316,11 +317,11 @@ mod tests {
         let buffer = spa_sys::spa_buffer {
             n_metas: 1,
             n_datas: 0,
-            metas: &mut meta,
+            metas: &raw mut meta,
             datas: std::ptr::null_mut(),
         };
 
-        let result = unsafe { extract_damage(&buffer) };
+        let result = unsafe { extract_damage(&raw const buffer) };
         assert!(result.is_some());
 
         let rects = result.unwrap();
@@ -340,11 +341,11 @@ mod tests {
         let buffer = spa_sys::spa_buffer {
             n_metas: 1,
             n_datas: 0,
-            metas: &mut meta,
+            metas: &raw mut meta,
             datas: std::ptr::null_mut(),
         };
 
-        let result = unsafe { extract_damage(&buffer) };
+        let result = unsafe { extract_damage(&raw const buffer) };
         assert!(result.is_none());
     }
 
@@ -362,7 +363,7 @@ mod tests {
             metas: std::ptr::null_mut(),
             datas: std::ptr::null_mut(),
         };
-        let result = unsafe { extract_cursor(&buffer) };
+        let result = unsafe { extract_cursor(&raw const buffer) };
         assert!(result.is_none());
     }
 
@@ -379,6 +380,7 @@ mod tests {
 
         let mut meta = spa_sys::spa_meta {
             type_: spa_sys::SPA_META_Cursor,
+            #[allow(clippy::cast_possible_truncation)]
             size: std::mem::size_of::<spa_sys::spa_meta_cursor>() as u32,
             data: std::ptr::addr_of!(cursor_meta).cast_mut().cast::<std::os::raw::c_void>(),
         };
@@ -386,11 +388,11 @@ mod tests {
         let buffer = spa_sys::spa_buffer {
             n_metas: 1,
             n_datas: 0,
-            metas: &mut meta,
+            metas: &raw mut meta,
             datas: std::ptr::null_mut(),
         };
 
-        let result = unsafe { extract_cursor(&buffer) };
+        let result = unsafe { extract_cursor(&raw const buffer) };
         assert!(result.is_some());
         let info = result.unwrap();
         assert!(!info.visible);
@@ -412,6 +414,7 @@ mod tests {
 
         let mut meta = spa_sys::spa_meta {
             type_: spa_sys::SPA_META_Cursor,
+            #[allow(clippy::cast_possible_truncation)]
             size: std::mem::size_of::<spa_sys::spa_meta_cursor>() as u32,
             data: std::ptr::addr_of!(cursor_meta).cast_mut().cast::<std::os::raw::c_void>(),
         };
@@ -419,11 +422,11 @@ mod tests {
         let buffer = spa_sys::spa_buffer {
             n_metas: 1,
             n_datas: 0,
-            metas: &mut meta,
+            metas: &raw mut meta,
             datas: std::ptr::null_mut(),
         };
 
-        let result = unsafe { extract_cursor(&buffer) };
+        let result = unsafe { extract_cursor(&raw const buffer) };
         assert!(result.is_some());
         let info = result.unwrap();
         assert!(info.visible);
