@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use ironrdp_core::{encode_vec, impl_as_any, Encode, WriteCursor};
 use ironrdp_dvc::{DvcEncode, DvcMessage, DvcProcessor, DvcProcessorFactory, DvcServerProcessor};
-use ironrdp_egfx::pdu::{Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};
+use ironrdp_egfx::pdu::{annex_b_to_avc, Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};
 use ironrdp_egfx::server::{GraphicsPipelineHandler, GraphicsPipelineServer};
 use ironrdp_pdu::PduResult;
 use ironrdp_server::ServerEvent;
@@ -370,12 +370,14 @@ impl EgfxController {
         let region = Avc420Region::full_frame(width, height, EGFX_QP);
         let regions = [region];
 
-        // Pass Annex B H.264 data directly — FreeRDP's OpenH264 decoder
-        // accepts start-code prefixed NALUs without conversion.
+        // Convert from Annex B (start-code prefixed) to AVC (length-prefixed)
+        // format. GStreamer outputs Annex B, but the EGFX AVC420 wire format
+        // requires length-prefixed NAL units per MS-RDPEGFX §2.2.4.4.2.
+        let avc_data = annex_b_to_avc(h264_data);
         let Some(frame_id) =
             inner
                 .server
-                .send_avc420_frame(surface_id, h264_data, &regions, timestamp_ms)
+                .send_avc420_frame(surface_id, &avc_data, &regions, timestamp_ms)
         else {
             return false;
         };
