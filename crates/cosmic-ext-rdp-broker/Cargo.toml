@@ -1,6 +1,6 @@
 [package]
-name = "cosmic-rdp-broker"
-description = "Multi-user RDP session broker for the COSMIC Desktop Environment"
+name = "cosmic-ext-rdp-broker"
+description = "Multi-user RDP session broker for the COSMIC™ desktop environment"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "cosmic-rdp-broker"
+name = "cosmic-ext-rdp-broker"
 path = "src/main.rs"
 
 [dependencies]

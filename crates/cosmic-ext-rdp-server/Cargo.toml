@@ -1,6 +1,6 @@
 [package]
-name = "cosmic-rdp-server"
-description = "RDP server for the COSMIC Desktop Environment"
+name = "cosmic-ext-rdp-server"
+description = "RDP server for the COSMIC™ desktop environment"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "cosmic-rdp-server"
+name = "cosmic-ext-rdp-server"
 path = "src/main.rs"
 
 [dependencies]

@@ -99,7 +99,7 @@ fn run_audio_loop(
 
     let stream = Stream::new(
         &core,
-        "cosmic-rdp-audio",
+        "cosmic-ext-rdp-audio",
         properties! {
             *pw::keys::MEDIA_TYPE => "Audio",
             *pw::keys::MEDIA_CATEGORY => "Capture",

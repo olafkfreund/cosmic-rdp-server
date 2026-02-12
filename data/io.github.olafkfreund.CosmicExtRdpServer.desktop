@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=RDP Server for COSMIC
+Comment=RDP server for remote desktop access to the COSMIC desktop
+Exec=cosmic-ext-rdp-server
+Type=Application
+NoDisplay=true
+Categories=Network;RemoteAccess;

@@ -92,7 +92,7 @@ fn run_pipewire_loop(
 
     let stream = Stream::new(
         &core,
-        "cosmic-rdp-capture",
+        "cosmic-ext-rdp-capture",
         properties! {
             *pw::keys::MEDIA_TYPE => "Video",
             *pw::keys::MEDIA_CATEGORY => "Capture",

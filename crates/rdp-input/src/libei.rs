@@ -362,7 +362,7 @@ async fn setup_ei_context() -> Result<(ei::Context, u32), InputError> {
         let resp = tokio::task::spawn_blocking(move || {
             ei_handshake_blocking(
                 &context,
-                "cosmic-rdp-server",
+                "cosmic-ext-rdp-server",
                 ei::handshake::ContextType::Sender,
             )
             .map(|resp| (context, resp))
@@ -417,7 +417,7 @@ async fn setup_ei_context() -> Result<(ei::Context, u32), InputError> {
     let resp = tokio::task::spawn_blocking(move || {
         ei_handshake_blocking(
             &context,
-            "cosmic-rdp-server",
+            "cosmic-ext-rdp-server",
             ei::handshake::ContextType::Sender,
         )
         .map(|resp| (context, resp))

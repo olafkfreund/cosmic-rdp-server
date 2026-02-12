@@ -1,4 +1,4 @@
-//! Video encoding abstraction for cosmic-rdp-server.
+//! Video encoding abstraction for cosmic-ext-rdp-server.
 //!
 //! Provides H.264 encoding via `GStreamer` with automatic hardware
 //! encoder detection (VAAPI, NVENC, x264 software fallback).

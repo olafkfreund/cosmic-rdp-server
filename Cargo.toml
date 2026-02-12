@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/cosmic-rdp-server",
-  "crates/cosmic-rdp-settings",
-  "crates/cosmic-rdp-broker",
+  "crates/cosmic-ext-rdp-server",
+  "crates/cosmic-ext-rdp-settings",
+  "crates/cosmic-ext-rdp-broker",
   "crates/rdp-capture",
   "crates/rdp-input",
   "crates/rdp-encode",
@@ -11,14 +11,14 @@ members = [
 ]
 
 [workspace.metadata.crane]
-name = "cosmic-rdp-server"
+name = "cosmic-ext-rdp-server"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.85"
 license = "GPL-3.0-only"
-repository = "https://github.com/olafkfreund/cosmic-rdp-server"
+repository = "https://github.com/olafkfreund/cosmic-ext-rdp-server"
 authors = ["Olaf K. Freund"]
 
 [workspace.dependencies]
@@ -38,14 +38,14 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
 # RDP protocol (git fork with EGFX support)
-ironrdp-server = { git = "https://github.com/olafkfreund/cosmic-IronRDP", features = ["helper"] }
-ironrdp-cliprdr = { git = "https://github.com/olafkfreund/cosmic-IronRDP" }
-ironrdp-core = { git = "https://github.com/olafkfreund/cosmic-IronRDP" }
-ironrdp-displaycontrol = { git = "https://github.com/olafkfreund/cosmic-IronRDP" }
-ironrdp-pdu = { git = "https://github.com/olafkfreund/cosmic-IronRDP" }
-ironrdp-rdpsnd = { git = "https://github.com/olafkfreund/cosmic-IronRDP" }
-ironrdp-dvc = { git = "https://github.com/olafkfreund/cosmic-IronRDP" }
-ironrdp-egfx = { git = "https://github.com/olafkfreund/cosmic-IronRDP" }
+ironrdp-server = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP", features = ["helper"] }
+ironrdp-cliprdr = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
+ironrdp-core = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
+ironrdp-displaycontrol = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
+ironrdp-pdu = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
+ironrdp-rdpsnd = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
+ironrdp-dvc = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
+ironrdp-egfx = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
 
 # Async utilities
 async-trait = "0.1"

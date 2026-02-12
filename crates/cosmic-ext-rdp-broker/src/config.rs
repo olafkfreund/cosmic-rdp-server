@@ -10,7 +10,7 @@ pub struct BrokerConfig {
     /// Address to bind the broker listener to.
     pub bind: String,
 
-    /// Path to the per-user `cosmic-rdp-server` binary.
+    /// Path to the per-user `cosmic-ext-rdp-server` binary.
     pub server_binary: PathBuf,
 
     /// Start of the port range allocated to per-user sessions.
@@ -54,14 +54,14 @@ impl Default for BrokerConfig {
     fn default() -> Self {
         Self {
             bind: "0.0.0.0:3389".to_string(),
-            server_binary: PathBuf::from("/usr/bin/cosmic-rdp-server"),
+            server_binary: PathBuf::from("/usr/bin/cosmic-ext-rdp-server"),
             port_range_start: 3390,
             port_range_end: 3489,
-            pam_service: "cosmic-rdp".to_string(),
+            pam_service: "cosmic-ext-rdp".to_string(),
             idle_timeout_secs: 3600,
             max_sessions: 100,
             session_policy: SessionPolicy::OnePerUser,
-            state_file: PathBuf::from("/var/lib/cosmic-rdp-broker/sessions.json"),
+            state_file: PathBuf::from("/var/lib/cosmic-ext-rdp-broker/sessions.json"),
             cert_path: None,
             key_path: None,
         }
@@ -78,7 +78,7 @@ impl Default for BrokerConfig {
 pub fn load(path: Option<&Path>) -> Result<BrokerConfig> {
     let path = match path {
         Some(p) => p.to_path_buf(),
-        None => PathBuf::from("/etc/cosmic-rdp-broker/config.toml"),
+        None => PathBuf::from("/etc/cosmic-ext-rdp-broker/config.toml"),
     };
 
     if !path.exists() {

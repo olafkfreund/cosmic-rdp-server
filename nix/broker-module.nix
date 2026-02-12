@@ -3,25 +3,25 @@
 with lib;
 
 let
-  cfg = config.services.cosmic-rdp-broker;
+  cfg = config.services.cosmic-ext-rdp-broker;
   settingsFormat = pkgs.formats.toml { };
 
-  configFile = settingsFormat.generate "cosmic-rdp-broker.toml" cfg.settings;
+  configFile = settingsFormat.generate "cosmic-ext-rdp-broker.toml" cfg.settings;
 in
 {
-  options.services.cosmic-rdp-broker = {
-    enable = mkEnableOption "COSMIC RDP Broker for multi-user remote desktop";
+  options.services.cosmic-ext-rdp-broker = {
+    enable = mkEnableOption "RDP for COSMIC Broker for multi-user remote desktop";
 
-    package = mkPackageOption pkgs "cosmic-rdp-broker" {
-      default = [ "cosmic-rdp-broker" ];
+    package = mkPackageOption pkgs "cosmic-ext-rdp-broker" {
+      default = [ "cosmic-ext-rdp-broker" ];
       example = literalExpression ''
-        pkgs.cosmic-rdp-broker
+        pkgs.cosmic-ext-rdp-broker
       '';
     };
 
-    serverPackage = mkPackageOption pkgs "cosmic-rdp-server" {
-      default = [ "cosmic-rdp-server" ];
-      description = "The cosmic-rdp-server package used for per-user sessions.";
+    serverPackage = mkPackageOption pkgs "cosmic-ext-rdp-server" {
+      default = [ "cosmic-ext-rdp-server" ];
+      description = "The cosmic-ext-rdp-server package used for per-user sessions.";
     };
 
     settings = mkOption {
@@ -48,7 +48,7 @@ in
 
           pam_service = mkOption {
             type = types.str;
-            default = "cosmic-rdp";
+            default = "cosmic-ext-rdp";
             description = "PAM service name for authentication.";
           };
 
@@ -72,13 +72,13 @@ in
 
           state_file = mkOption {
             type = types.str;
-            default = "/var/lib/cosmic-rdp-broker/sessions.json";
+            default = "/var/lib/cosmic-ext-rdp-broker/sessions.json";
             description = "Path to the persisted session state file.";
           };
         };
       };
       default = { };
-      description = "Configuration for the COSMIC RDP Broker.";
+      description = "Configuration for the RDP for COSMIC Broker.";
     };
 
     openFirewall = mkOption {
@@ -90,11 +90,11 @@ in
 
   config = mkIf cfg.enable {
     # Inject server_binary path from the package.
-    services.cosmic-rdp-broker.settings.server_binary =
-      mkDefault "${cfg.serverPackage}/bin/cosmic-rdp-server";
+    services.cosmic-ext-rdp-broker.settings.server_binary =
+      mkDefault "${cfg.serverPackage}/bin/cosmic-ext-rdp-server";
 
-    # PAM configuration for the cosmic-rdp service.
-    security.pam.services.cosmic-rdp = {
+    # PAM configuration for the cosmic-ext-rdp service.
+    security.pam.services.cosmic-ext-rdp = {
       text = ''
         auth    required pam_unix.so
         account required pam_unix.so
@@ -102,19 +102,19 @@ in
     };
 
     # System service (runs as root for systemd-run and PAM).
-    systemd.services.cosmic-rdp-broker = {
-      description = "COSMIC RDP Session Broker";
+    systemd.services.cosmic-ext-rdp-broker = {
+      description = "RDP for COSMIC Session Broker";
       after = [ "network.target" "multi-user.target" ];
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${cfg.package}/bin/cosmic-rdp-broker --config ${configFile}";
+        ExecStart = "${cfg.package}/bin/cosmic-ext-rdp-broker --config ${configFile}";
         Restart = "on-failure";
         RestartSec = 5;
 
         # State directory for sessions.json
-        StateDirectory = "cosmic-rdp-broker";
+        StateDirectory = "cosmic-ext-rdp-broker";
 
         # Security hardening (limited because broker needs root for
         # systemd-run and PAM).
@@ -129,14 +129,14 @@ in
 
         # The broker needs write access to the state directory.
         ReadWritePaths = [
-          "/var/lib/cosmic-rdp-broker"
+          "/var/lib/cosmic-ext-rdp-broker"
         ];
       };
     };
 
     # systemd slice for per-user RDP sessions.
-    systemd.slices.cosmic-rdp-sessions = {
-      description = "COSMIC RDP User Sessions";
+    systemd.slices.cosmic-ext-rdp-sessions = {
+      description = "RDP for COSMIC User Sessions";
       sliceConfig = {
         # Resource limits for all RDP sessions combined.
         MemoryMax = "8G";

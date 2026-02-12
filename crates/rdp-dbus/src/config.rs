@@ -7,14 +7,14 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Default config directory under `$XDG_CONFIG_HOME`.
-const CONFIG_DIR: &str = "cosmic-rdp-server";
+const CONFIG_DIR: &str = "cosmic-ext-rdp-server";
 /// Default config file name.
 const CONFIG_FILE: &str = "config.toml";
 
 /// Resolve the default config file path.
 ///
-/// Returns `$XDG_CONFIG_HOME/cosmic-rdp-server/config.toml` or
-/// `~/.config/cosmic-rdp-server/config.toml`.
+/// Returns `$XDG_CONFIG_HOME/cosmic-ext-rdp-server/config.toml` or
+/// `~/.config/cosmic-ext-rdp-server/config.toml`.
 #[must_use]
 pub fn config_path() -> PathBuf {
     dirs::config_dir()

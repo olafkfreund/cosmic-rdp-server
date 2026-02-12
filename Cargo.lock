@@ -1472,36 +1472,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-freedesktop-icons"
+name = "cosmic-ext-rdp-broker"
 version = "0.4.0"
-source = "git+https://github.com/pop-os/freedesktop-icons#7a61a704f6d1ec41f71cbe766e3cc484858523fa"
-dependencies = [
- "bstr",
- "btoi",
- "memchr",
- "memmap2",
- "thiserror 2.0.18",
- "tracing",
- "xdg",
-]
-
-[[package]]
-name = "cosmic-protocols"
-version = "0.1.0"
-source = "git+https://github.com/pop-os/cosmic-protocols?rev=d0e95be#d0e95be25e423cfe523b11111a3666ed7aaf0dc4"
-dependencies = [
- "bitflags 2.10.0",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-wlr",
- "wayland-scanner",
- "wayland-server",
-]
-
-[[package]]
-name = "cosmic-rdp-broker"
-version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1519,8 +1491,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-rdp-server"
-version = "0.3.0"
+name = "cosmic-ext-rdp-server"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1553,8 +1525,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-rdp-settings"
-version = "0.3.0"
+name = "cosmic-ext-rdp-settings"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "i18n-embed 0.15.4",
@@ -1566,6 +1538,34 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "zbus 5.13.2",
+]
+
+[[package]]
+name = "cosmic-freedesktop-icons"
+version = "0.4.0"
+source = "git+https://github.com/pop-os/freedesktop-icons#7a61a704f6d1ec41f71cbe766e3cc484858523fa"
+dependencies = [
+ "bstr",
+ "btoi",
+ "memchr",
+ "memmap2",
+ "thiserror 2.0.18",
+ "tracing",
+ "xdg",
+]
+
+[[package]]
+name = "cosmic-protocols"
+version = "0.1.0"
+source = "git+https://github.com/pop-os/cosmic-protocols?rev=d0e95be#d0e95be25e423cfe523b11111a3666ed7aaf0dc4"
+dependencies = [
+ "bitflags 2.10.0",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+ "wayland-scanner",
+ "wayland-server",
 ]
 
 [[package]]
@@ -4054,7 +4054,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-acceptor"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-async",
  "ironrdp-connector",
@@ -4067,7 +4067,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-ainput"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4079,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-async"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bytes",
  "ironrdp-connector",
@@ -4091,7 +4091,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-cliprdr"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4103,7 +4103,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-connector"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-core",
  "ironrdp-error",
@@ -4121,7 +4121,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-core"
 version = "0.1.5"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-error",
 ]
@@ -4129,7 +4129,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-displaycontrol"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-core",
  "ironrdp-dvc",
@@ -4141,7 +4141,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-dvc"
 version = "0.5.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "ironrdp-core",
  "ironrdp-pdu",
@@ -4153,7 +4153,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-egfx"
 version = "0.1.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bit_field",
  "bitflags 2.10.0",
@@ -4167,12 +4167,12 @@ dependencies = [
 [[package]]
 name = "ironrdp-error"
 version = "0.1.3"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 
 [[package]]
 name = "ironrdp-graphics"
 version = "0.7.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bit_field",
  "bitflags 2.10.0",
@@ -4188,7 +4188,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-pdu"
 version = "0.7.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bit_field",
  "bitflags 2.10.0",
@@ -4211,7 +4211,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-rdpsnd"
 version = "0.7.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4223,7 +4223,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-server"
 version = "0.10.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4253,7 +4253,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-svc"
 version = "0.6.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bitflags 2.10.0",
  "ironrdp-core",
@@ -4263,7 +4263,7 @@ dependencies = [
 [[package]]
 name = "ironrdp-tokio"
 version = "0.8.0"
-source = "git+https://github.com/olafkfreund/cosmic-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
+source = "git+https://github.com/olafkfreund/cosmic-ext-IronRDP#6771a10951ae8232731517109535ffaa18c170e2"
 dependencies = [
  "bytes",
  "ironrdp-async",
@@ -6421,7 +6421,7 @@ dependencies = [
 
 [[package]]
 name = "rdp-capture"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ashpd 0.12.1",
  "pipewire",
@@ -6432,7 +6432,7 @@ dependencies = [
 
 [[package]]
 name = "rdp-dbus"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -6446,7 +6446,7 @@ dependencies = [
 
 [[package]]
 name = "rdp-encode"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "gstreamer",
  "gstreamer-app",
@@ -6457,7 +6457,7 @@ dependencies = [
 
 [[package]]
 name = "rdp-input"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ashpd 0.12.1",
  "reis",

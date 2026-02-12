@@ -1,6 +1,6 @@
 [package]
 name = "rdp-dbus"
-description = "Shared D-Bus types and config structs for cosmic-rdp-server"
+description = "Shared D-Bus types and config structs for cosmic-ext-rdp-server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,10 +1,10 @@
-/// D-Bus proxy for the COSMIC RDP Server daemon.
+/// D-Bus proxy for the RDP Server daemon.
 ///
 /// Used by the settings UI to query status and send commands.
 #[zbus::proxy(
-    interface = "com.system76.CosmicRdpServer",
-    default_service = "com.system76.CosmicRdpServer",
-    default_path = "/com/system76/CosmicRdpServer"
+    interface = "io.github.olafkfreund.CosmicExtRdpServer",
+    default_service = "io.github.olafkfreund.CosmicExtRdpServer",
+    default_path = "/io/github/olafkfreund/CosmicExtRdpServer"
 )]
 pub trait RdpServer {
     /// Get the current server status (see [`ServerStatus`] repr).

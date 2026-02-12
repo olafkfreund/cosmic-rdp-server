@@ -1,4 +1,4 @@
-//! Screen capture abstraction for cosmic-rdp-server.
+//! Screen capture abstraction for cosmic-ext-rdp-server.
 //!
 //! Provides screen capture via the XDG `ScreenCast` portal and `PipeWire`.
 //!

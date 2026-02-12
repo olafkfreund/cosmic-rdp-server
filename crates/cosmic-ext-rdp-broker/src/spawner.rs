@@ -116,7 +116,7 @@ async fn discover_wayland_display(uid: u32, xdg_runtime_dir: &str) -> Result<Str
     bail!("could not discover Wayland display for UID {uid}")
 }
 
-/// Spawn a per-user `cosmic-rdp-server` instance via `systemd-run`.
+/// Spawn a per-user `cosmic-ext-rdp-server` instance via `systemd-run`.
 ///
 /// Creates a transient systemd user unit that runs the server process
 /// as the specified user. The server binds to `127.0.0.1:<port>` with
@@ -129,7 +129,7 @@ pub async fn spawn_user_server(
     env: &UserSessionEnv,
     username: &str,
 ) -> Result<String> {
-    let unit_name = format!("cosmic-rdp-session-{username}");
+    let unit_name = format!("cosmic-ext-rdp-session-{username}");
 
     let output = tokio::process::Command::new("systemd-run")
         .args([
@@ -141,7 +141,7 @@ pub async fn spawn_user_server(
             &unit_name,
             "--scope",
             "--slice",
-            "cosmic-rdp-sessions.slice",
+            "cosmic-ext-rdp-sessions.slice",
             "--setenv",
             &format!("WAYLAND_DISPLAY={}", env.wayland_display),
             "--setenv",

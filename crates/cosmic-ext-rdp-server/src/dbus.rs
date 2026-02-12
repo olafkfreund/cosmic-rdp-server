@@ -6,8 +6,8 @@ use tokio::sync::mpsc;
 /// Start the D-Bus server and return a command receiver for daemon control.
 ///
 /// The D-Bus connection runs on the session bus and exposes the
-/// `com.system76.CosmicRdpServer` interface at
-/// `/com/system76/CosmicRdpServer`.
+/// `io.github.olafkfreund.CosmicExtRdpServer` interface at
+/// `/io/github/olafkfreund/CosmicExtRdpServer`.
 ///
 /// # Errors
 ///

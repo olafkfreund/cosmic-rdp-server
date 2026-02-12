@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# cosmic-rdp-server manual testing script
+# cosmic-ext-rdp-server manual testing script
 # Run from a COSMIC desktop terminal (needs Wayland + D-Bus session)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER="$SCRIPT_DIR/target/release/cosmic-rdp-server"
-SETTINGS="$SCRIPT_DIR/target/release/cosmic-rdp-settings"
+SERVER="$SCRIPT_DIR/target/release/cosmic-ext-rdp-server"
+SETTINGS="$SCRIPT_DIR/target/release/cosmic-ext-rdp-settings"
 PORT="${1:-3389}"
 
 RED='\033[0;31m'
@@ -21,7 +21,7 @@ fail()  { echo -e "${RED}[FAIL]${NC} $*"; }
 
 check_prereqs() {
     echo "============================================"
-    echo " cosmic-rdp-server Test Suite"
+    echo " cosmic-ext-rdp-server Test Suite"
     echo "============================================"
     echo ""
 
@@ -143,7 +143,7 @@ test_config() {
     echo "============================================"
     echo " Test 3: Config File"
     echo "============================================"
-    local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/cosmic-rdp-server"
+    local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/cosmic-ext-rdp-server"
     local config_file="$config_dir/config.toml"
 
     if [[ -f "$config_file" ]]; then
@@ -215,21 +215,21 @@ test_dbus() {
     fi
 
     info "Introspecting D-Bus interface..."
-    if busctl --user introspect com.system76.CosmicRdpServer /com/system76/CosmicRdpServer 2>/dev/null; then
+    if busctl --user introspect io.github.olafkfreund.CosmicExtRdpServer /io/github/olafkfreund/CosmicExtRdpServer 2>/dev/null; then
         ok "D-Bus interface accessible"
     else
         fail "D-Bus interface not found"
     fi
 
     info "Checking properties..."
-    busctl --user get-property com.system76.CosmicRdpServer /com/system76/CosmicRdpServer com.system76.CosmicRdpServer Running 2>/dev/null && ok "Running property works" || fail "Running property failed"
-    busctl --user get-property com.system76.CosmicRdpServer /com/system76/CosmicRdpServer com.system76.CosmicRdpServer BoundAddress 2>/dev/null && ok "BoundAddress property works" || fail "BoundAddress property failed"
+    busctl --user get-property io.github.olafkfreund.CosmicExtRdpServer /io/github/olafkfreund/CosmicExtRdpServer io.github.olafkfreund.CosmicExtRdpServer Running 2>/dev/null && ok "Running property works" || fail "Running property failed"
+    busctl --user get-property io.github.olafkfreund.CosmicExtRdpServer /io/github/olafkfreund/CosmicExtRdpServer io.github.olafkfreund.CosmicExtRdpServer BoundAddress 2>/dev/null && ok "BoundAddress property works" || fail "BoundAddress property failed"
 
     info "Testing Reload method..."
-    busctl --user call com.system76.CosmicRdpServer /com/system76/CosmicRdpServer com.system76.CosmicRdpServer Reload 2>/dev/null && ok "Reload works" || fail "Reload failed"
+    busctl --user call io.github.olafkfreund.CosmicExtRdpServer /io/github/olafkfreund/CosmicExtRdpServer io.github.olafkfreund.CosmicExtRdpServer Reload 2>/dev/null && ok "Reload works" || fail "Reload failed"
 
     info "Testing Stop method..."
-    busctl --user call com.system76.CosmicRdpServer /com/system76/CosmicRdpServer com.system76.CosmicRdpServer Stop 2>/dev/null && ok "Stop works" || fail "Stop failed"
+    busctl --user call io.github.olafkfreund.CosmicExtRdpServer /io/github/olafkfreund/CosmicExtRdpServer io.github.olafkfreund.CosmicExtRdpServer Stop 2>/dev/null && ok "Stop works" || fail "Stop failed"
 
     sleep 1
     if kill -0 "$pid" 2>/dev/null; then
@@ -250,7 +250,7 @@ test_settings_gui() {
         return 0
     fi
 
-    info "Launching cosmic-rdp-settings..."
+    info "Launching cosmic-ext-rdp-settings..."
     info "(Close the window when done testing)"
     "$SETTINGS" 2>&1 || true
     ok "Settings GUI test complete"

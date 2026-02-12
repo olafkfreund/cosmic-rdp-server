@@ -1,8 +1,8 @@
-# CLAUDE.md - cosmic-rdp-server
+# CLAUDE.md - cosmic-ext-rdp-server
 
 ## Project Overview
 
-RDP server for the COSMIC Desktop Environment. Allows remote desktop access using standard RDP clients (Windows mstsc.exe, FreeRDP, Remmina).
+RDP server for the COSMIC™ desktop environment. Allows remote desktop access using standard RDP clients (Windows mstsc.exe, FreeRDP, Remmina).
 
 ## Architecture
 
@@ -10,9 +10,9 @@ Standalone daemon (direct Wayland client) with 7 crates:
 
 | Crate | Purpose |
 |-------|---------|
-| `cosmic-rdp-server` | Main binary: CLI, config, TLS, D-Bus server, orchestration |
-| `cosmic-rdp-broker` | Multi-user session broker: TCP proxy, X.224 routing, session lifecycle |
-| `cosmic-rdp-settings` | COSMIC settings GUI: config editor, D-Bus status, nav pages |
+| `cosmic-ext-rdp-server` | Main binary: CLI, config, TLS, D-Bus server, orchestration |
+| `cosmic-ext-rdp-broker` | Multi-user session broker: TCP proxy, X.224 routing, session lifecycle |
+| `cosmic-ext-rdp-settings` | Settings GUI for COSMIC: config editor, D-Bus status, nav pages |
 | `rdp-dbus` | Shared D-Bus types, config structs, client proxy |
 | `rdp-capture` | Screen capture via ScreenCast portal + PipeWire |
 | `rdp-input` | Input injection via reis/libei |
@@ -40,8 +40,8 @@ sudo just install-broker    # Install broker to system
 sudo just install-all   # Install everything
 nix develop             # Enter dev shell with all dependencies
 nix build               # Build server with Nix
-nix build .#cosmic-rdp-settings  # Build settings GUI with Nix
-nix build .#cosmic-rdp-broker    # Build broker with Nix
+nix build .#cosmic-ext-rdp-settings  # Build settings GUI with Nix
+nix build .#cosmic-ext-rdp-broker    # Build broker with Nix
 ```
 
 ## Key Dependencies
@@ -56,7 +56,7 @@ nix build .#cosmic-rdp-broker    # Build broker with Nix
 - **arboard** 3: System clipboard access (Wayland + X11)
 - **tokio-rustls** + **rcgen**: TLS + self-signed certificates
 - **zbus** 5: D-Bus IPC between daemon and settings GUI
-- **libcosmic** (git): COSMIC Desktop application framework (settings GUI)
+- **libcosmic** (git): COSMIC application framework (settings GUI)
 
 ## Code Style
 

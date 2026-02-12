@@ -68,7 +68,7 @@ impl RdpServerInterface {
     }
 }
 
-#[interface(name = "com.system76.CosmicRdpServer")]
+#[interface(name = "io.github.olafkfreund.CosmicExtRdpServer")]
 impl RdpServerInterface {
     /// Get the current server status.
     async fn get_status(&self) -> u8 {

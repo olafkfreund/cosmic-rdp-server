@@ -1,7 +1,7 @@
-# cosmic-rdp-server configuration
+# cosmic-ext-rdp-server configuration
 #
 # Copy this file to a location of your choice and pass it via:
-#   cosmic-rdp-server --config /path/to/config.toml
+#   cosmic-ext-rdp-server --config /path/to/config.toml
 #
 # All values shown below are the defaults. Uncomment and modify as needed.
 
@@ -10,11 +10,11 @@
 
 # Path to a PEM-encoded TLS certificate.
 # If not set, a self-signed certificate is generated on each start.
-# cert_path = "/etc/cosmic-rdp-server/cert.pem"
+# cert_path = "/etc/cosmic-ext-rdp-server/cert.pem"
 
 # Path to the corresponding PEM-encoded private key.
 # Required if cert_path is set.
-# key_path = "/etc/cosmic-rdp-server/key.pem"
+# key_path = "/etc/cosmic-ext-rdp-server/key.pem"
 
 # Use a static blue screen instead of live capture (for testing).
 # static_display = false

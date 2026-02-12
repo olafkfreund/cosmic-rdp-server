@@ -12,12 +12,12 @@ mod server;
 mod sound;
 mod tls;
 
-/// RDP server for the COSMIC Desktop Environment.
+/// RDP server for the COSMIC™ desktop environment.
 ///
 /// Allows remote access to COSMIC desktops using standard RDP clients
 /// (Windows `mstsc.exe`, `FreeRDP`, Remmina).
 #[derive(Parser, Debug)]
-#[command(name = "cosmic-rdp-server", version, about)]
+#[command(name = "cosmic-ext-rdp-server", version, about)]
 struct Cli {
     /// Address to bind the RDP server to.
     #[arg(long)]
@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
             }
         };
 
-        tracing::info!(bind = %cfg.bind, "Starting cosmic-rdp-server");
+        tracing::info!(bind = %cfg.bind, "Starting cosmic-ext-rdp-server");
         dbus_state.set_status(rdp_dbus::types::ServerStatus::Running).await;
 
         let result = if cfg.static_display {
@@ -346,12 +346,12 @@ fn is_localhost(ip: std::net::IpAddr) -> bool {
 
 /// Path to the `ScreenCast` portal restore token file.
 ///
-/// Saved under `$XDG_RUNTIME_DIR/cosmic-rdp-server/restore_token` so it
+/// Saved under `$XDG_RUNTIME_DIR/cosmic-ext-rdp-server/restore_token` so it
 /// persists across service restarts within the same login session but is
 /// cleared on logout.
 fn restore_token_path() -> Option<PathBuf> {
     std::env::var_os("XDG_RUNTIME_DIR")
-        .map(|dir| PathBuf::from(dir).join("cosmic-rdp-server").join("restore_token"))
+        .map(|dir| PathBuf::from(dir).join("cosmic-ext-rdp-server").join("restore_token"))
 }
 
 /// Load a previously saved `ScreenCast` portal restore token.

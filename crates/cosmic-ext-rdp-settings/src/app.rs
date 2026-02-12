@@ -222,7 +222,7 @@ impl Application for App {
     type Flags = ();
     type Message = Message;
 
-    const APP_ID: &'static str = "com.system76.CosmicRdpSettings";
+    const APP_ID: &'static str = "io.github.olafkfreund.CosmicExtRdpSettings";
 
     fn core(&self) -> &Core {
         &self.core
@@ -416,7 +416,7 @@ impl Application for App {
             Message::ToggleServer(enable) => {
                 if enable {
                     self.error_message =
-                        Some("Start the server via: systemctl --user start cosmic-rdp-server".to_string());
+                        Some("Start the server via: systemctl --user start cosmic-ext-rdp-server".to_string());
                 } else {
                     self.error_message = None;
                     return cosmic::task::future(async {

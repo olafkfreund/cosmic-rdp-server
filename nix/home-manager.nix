@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.services.cosmic-rdp-server;
+  cfg = config.services.cosmic-ext-rdp-server;
   settingsFormat = pkgs.formats.toml { };
 
   effectiveSettings = cfg.settings // optionalAttrs cfg.auth.enable {
@@ -14,13 +14,13 @@ let
     };
   };
 
-  configFile = settingsFormat.generate "cosmic-rdp-server.toml" effectiveSettings;
+  configFile = settingsFormat.generate "cosmic-ext-rdp-server.toml" effectiveSettings;
 
-  startScript = pkgs.writeShellScript "cosmic-rdp-server-start" ''
+  startScript = pkgs.writeShellScript "cosmic-ext-rdp-server-start" ''
     CONFIG="${configFile}"
 
     if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -f "$CREDENTIALS_DIRECTORY/rdp-password" ]; then
-      RUNTIME_CONFIG="''${XDG_RUNTIME_DIR}/cosmic-rdp-server/config.toml"
+      RUNTIME_CONFIG="''${XDG_RUNTIME_DIR}/cosmic-ext-rdp-server/config.toml"
       ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$RUNTIME_CONFIG")"
       ${pkgs.coreutils}/bin/cp "$CONFIG" "$RUNTIME_CONFIG"
       PASSWORD=$(${pkgs.coreutils}/bin/cat "$CREDENTIALS_DIRECTORY/rdp-password")
@@ -30,30 +30,30 @@ let
       CONFIG="$RUNTIME_CONFIG"
     fi
 
-    exec ${cfg.package}/bin/cosmic-rdp-server --config "$CONFIG"
+    exec ${cfg.package}/bin/cosmic-ext-rdp-server --config "$CONFIG"
   '';
 in
 {
-  options.services.cosmic-rdp-server = {
-    enable = mkEnableOption "COSMIC RDP Server for remote desktop access (user-level)";
+  options.services.cosmic-ext-rdp-server = {
+    enable = mkEnableOption "RDP Server for COSMIC for remote desktop access (user-level)";
 
-    package = mkPackageOption pkgs "cosmic-rdp-server" {
-      default = [ "cosmic-rdp-server" ];
+    package = mkPackageOption pkgs "cosmic-ext-rdp-server" {
+      default = [ "cosmic-ext-rdp-server" ];
       example = literalExpression ''
-        pkgs.cosmic-rdp-server
+        pkgs.cosmic-ext-rdp-server
       '';
     };
 
     installSettings = mkOption {
       type = types.bool;
       default = true;
-      description = "Whether to install the COSMIC RDP Settings GUI application.";
+      description = "Whether to install the RDP Settings for COSMIC GUI application.";
     };
 
-    settingsPackage = mkPackageOption pkgs "cosmic-rdp-settings" {
-      default = [ "cosmic-rdp-settings" ];
+    settingsPackage = mkPackageOption pkgs "cosmic-ext-rdp-settings" {
+      default = [ "cosmic-ext-rdp-settings" ];
       example = literalExpression ''
-        pkgs.cosmic-rdp-settings
+        pkgs.cosmic-ext-rdp-settings
       '';
     };
 
@@ -64,7 +64,7 @@ in
         Whether to start the RDP server automatically with the graphical session.
 
         When disabled, you can start it manually with:
-          systemctl --user start cosmic-rdp-server
+          systemctl --user start cosmic-ext-rdp-server
       '';
     };
 
@@ -93,7 +93,7 @@ in
           Loaded via systemd LoadCredential so it never appears in the
           Nix store. Compatible with agenix/sops-nix secrets.
         '';
-        example = "/run/agenix/cosmic-rdp-password";
+        example = "/run/agenix/cosmic-ext-rdp-password";
       };
     };
 
@@ -185,7 +185,7 @@ in
       };
       default = { };
       description = ''
-        Configuration for the COSMIC RDP Server.
+        Configuration for the RDP Server for COSMIC.
         Settings are written to a TOML configuration file.
       '';
     };
@@ -198,17 +198,17 @@ in
     assertions = [
       {
         assertion = cfg.auth.enable -> cfg.auth.username != "";
-        message = "services.cosmic-rdp-server.auth.username must be set when auth is enabled.";
+        message = "services.cosmic-ext-rdp-server.auth.username must be set when auth is enabled.";
       }
       {
         assertion = cfg.auth.enable -> cfg.auth.passwordFile != null;
-        message = "services.cosmic-rdp-server.auth.passwordFile must be set when auth is enabled.";
+        message = "services.cosmic-ext-rdp-server.auth.passwordFile must be set when auth is enabled.";
       }
     ];
 
-    systemd.user.services.cosmic-rdp-server = {
+    systemd.user.services.cosmic-ext-rdp-server = {
       Unit = {
-        Description = "COSMIC RDP Server";
+        Description = "RDP Server for COSMIC";
         After = [ "graphical-session.target" ];
         PartOf = [ "graphical-session.target" ];
       };
@@ -218,7 +218,7 @@ in
         ExecStart = toString startScript;
         Restart = "on-failure";
         RestartSec = 5;
-        RuntimeDirectory = "cosmic-rdp-server";
+        RuntimeDirectory = "cosmic-ext-rdp-server";
 
         LoadCredential = optional (cfg.auth.enable && cfg.auth.passwordFile != null)
           "rdp-password:${cfg.auth.passwordFile}";

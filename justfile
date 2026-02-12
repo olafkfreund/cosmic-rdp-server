@@ -1,9 +1,9 @@
-name := 'cosmic-rdp-server'
-settings-name := 'cosmic-rdp-settings'
-broker-name := 'cosmic-rdp-broker'
-export APPID := 'com.system76.CosmicRdpServer'
-export SETTINGS_APPID := 'com.system76.CosmicRdpSettings'
-export BROKER_APPID := 'com.system76.CosmicRdpBroker'
+name := 'cosmic-ext-rdp-server'
+settings-name := 'cosmic-ext-rdp-settings'
+broker-name := 'cosmic-ext-rdp-broker'
+export APPID := 'io.github.olafkfreund.CosmicExtRdpServer'
+export SETTINGS_APPID := 'io.github.olafkfreund.CosmicExtRdpSettings'
+export BROKER_APPID := 'io.github.olafkfreund.CosmicExtRdpBroker'
 
 rootdir := ''
 prefix := '/usr'
@@ -25,19 +25,19 @@ build-release *args:
 
 # Build settings app (debug)
 build-settings-debug *args:
-    cargo build -p cosmic-rdp-settings {{args}}
+    cargo build -p cosmic-ext-rdp-settings {{args}}
 
 # Build settings app (release)
 build-settings-release *args:
-    cargo build --release -p cosmic-rdp-settings {{args}}
+    cargo build --release -p cosmic-ext-rdp-settings {{args}}
 
 # Build broker (debug)
 build-broker-debug *args:
-    cargo build -p cosmic-rdp-broker {{args}}
+    cargo build -p cosmic-ext-rdp-broker {{args}}
 
 # Build broker (release)
 build-broker-release *args:
-    cargo build --release -p cosmic-rdp-broker {{args}}
+    cargo build --release -p cosmic-ext-rdp-broker {{args}}
 
 # Run clippy with pedantic warnings
 check *args:
@@ -49,11 +49,11 @@ run *args:
 
 # Run settings app
 run-settings *args:
-    RUST_BACKTRACE=full cargo run -p cosmic-rdp-settings -- {{args}}
+    RUST_BACKTRACE=full cargo run -p cosmic-ext-rdp-settings -- {{args}}
 
 # Run broker
 run-broker *args:
-    RUST_BACKTRACE=full cargo run -p cosmic-rdp-broker -- {{args}}
+    RUST_BACKTRACE=full cargo run -p cosmic-ext-rdp-broker -- {{args}}
 
 # Run tests
 test *args:

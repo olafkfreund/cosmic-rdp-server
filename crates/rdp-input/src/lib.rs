@@ -1,4 +1,4 @@
-//! Input injection abstraction for cosmic-rdp-server.
+//! Input injection abstraction for cosmic-ext-rdp-server.
 //!
 //! Provides keyboard and mouse injection into the COSMIC compositor
 //! via `libei` (using the `reis` crate for direct protocol access).

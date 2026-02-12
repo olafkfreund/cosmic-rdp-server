@@ -1,5 +1,5 @@
 {
-  description = "RDP server for the COSMIC Desktop Environment";
+  description = "RDP server for the COSMIC desktop environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -89,7 +89,7 @@
 
         cargoArtifacts = craneLib.buildDepsOnly pkgDef;
 
-        cosmic-rdp-server = craneLib.buildPackage (pkgDef // {
+        cosmic-ext-rdp-server = craneLib.buildPackage (pkgDef // {
           inherit cargoArtifacts;
         });
 
@@ -99,9 +99,9 @@
 
         settingsCargoArtifacts = craneLib.buildDepsOnly settingsPkgDef;
 
-        cosmic-rdp-settings = craneLib.buildPackage (settingsPkgDef // {
+        cosmic-ext-rdp-settings = craneLib.buildPackage (settingsPkgDef // {
           cargoArtifacts = settingsCargoArtifacts;
-          cargoExtraArgs = "--package cosmic-rdp-settings";
+          cargoExtraArgs = "--package cosmic-ext-rdp-settings";
         });
 
         # Broker only needs base deps (no GUI, no GStreamer runtime).
@@ -121,18 +121,18 @@
 
         brokerCargoArtifacts = craneLib.buildDepsOnly brokerPkgDef;
 
-        cosmic-rdp-broker = craneLib.buildPackage (brokerPkgDef // {
+        cosmic-ext-rdp-broker = craneLib.buildPackage (brokerPkgDef // {
           cargoArtifacts = brokerCargoArtifacts;
-          cargoExtraArgs = "--package cosmic-rdp-broker";
+          cargoExtraArgs = "--package cosmic-ext-rdp-broker";
         });
       in
       {
         checks = {
-          inherit cosmic-rdp-server;
+          inherit cosmic-ext-rdp-server;
         };
 
         packages = {
-          default = cosmic-rdp-server.overrideAttrs (oldAttrs: {
+          default = cosmic-ext-rdp-server.overrideAttrs (oldAttrs: {
             buildPhase = ''
               just prefix=$out build-release
             '';
@@ -140,9 +140,9 @@
               just prefix=$out install
             '';
           });
-          cosmic-rdp-server = self.packages.${system}.default;
+          cosmic-ext-rdp-server = self.packages.${system}.default;
 
-          cosmic-rdp-settings = cosmic-rdp-settings.overrideAttrs (oldAttrs: {
+          cosmic-ext-rdp-settings = cosmic-ext-rdp-settings.overrideAttrs (oldAttrs: {
             buildPhase = ''
               just prefix=$out build-settings-release
             '';
@@ -151,7 +151,7 @@
             '';
           });
 
-          cosmic-rdp-broker = cosmic-rdp-broker.overrideAttrs (oldAttrs: {
+          cosmic-ext-rdp-broker = cosmic-ext-rdp-broker.overrideAttrs (oldAttrs: {
             buildPhase = ''
               just prefix=$out build-broker-release
             '';
@@ -165,11 +165,11 @@
           default = flake-utils.lib.mkApp {
             drv = self.packages.${system}.default;
           };
-          cosmic-rdp-settings = flake-utils.lib.mkApp {
-            drv = self.packages.${system}.cosmic-rdp-settings;
+          cosmic-ext-rdp-settings = flake-utils.lib.mkApp {
+            drv = self.packages.${system}.cosmic-ext-rdp-settings;
           };
-          cosmic-rdp-broker = flake-utils.lib.mkApp {
-            drv = self.packages.${system}.cosmic-rdp-broker;
+          cosmic-ext-rdp-broker = flake-utils.lib.mkApp {
+            drv = self.packages.${system}.cosmic-ext-rdp-broker;
           };
         };
 
@@ -186,7 +186,7 @@
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (runtimeDeps ++ guiRuntimeDeps);
 
           shellHook = ''
-            echo "cosmic-rdp-server development environment"
+            echo "cosmic-ext-rdp-server development environment"
             echo "  just build-debug   - Debug build"
             echo "  just build-release - Release build"
             echo "  just check         - Clippy with pedantic"
@@ -197,19 +197,19 @@
     ) // {
       nixosModules = {
         default = import ./nix/module.nix;
-        cosmic-rdp-server = import ./nix/module.nix;
-        cosmic-rdp-broker = import ./nix/broker-module.nix;
+        cosmic-ext-rdp-server = import ./nix/module.nix;
+        cosmic-ext-rdp-broker = import ./nix/broker-module.nix;
       };
 
       homeManagerModules = {
         default = import ./nix/home-manager.nix;
-        cosmic-rdp-server = import ./nix/home-manager.nix;
+        cosmic-ext-rdp-server = import ./nix/home-manager.nix;
       };
 
       overlays.default = final: prev: {
-        cosmic-rdp-server = self.packages.${prev.system}.default;
-        cosmic-rdp-settings = self.packages.${prev.system}.cosmic-rdp-settings;
-        cosmic-rdp-broker = self.packages.${prev.system}.cosmic-rdp-broker;
+        cosmic-ext-rdp-server = self.packages.${prev.system}.default;
+        cosmic-ext-rdp-settings = self.packages.${prev.system}.cosmic-ext-rdp-settings;
+        cosmic-ext-rdp-broker = self.packages.${prev.system}.cosmic-ext-rdp-broker;
       };
     };
 }

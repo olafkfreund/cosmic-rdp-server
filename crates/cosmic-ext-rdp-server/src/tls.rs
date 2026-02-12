@@ -48,7 +48,7 @@ pub fn generate_self_signed(bind_ip: IpAddr) -> Result<TlsContext> {
 
     params.distinguished_name.push(
         rcgen::DnType::CommonName,
-        rcgen::DnValue::Utf8String("cosmic-rdp-server".to_string()),
+        rcgen::DnValue::Utf8String("cosmic-ext-rdp-server".to_string()),
     );
 
     let cert = params

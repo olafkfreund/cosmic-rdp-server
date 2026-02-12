@@ -12,13 +12,13 @@ mod session;
 mod spawner;
 mod x224;
 
-/// Multi-user RDP session broker for the COSMIC Desktop Environment.
+/// Multi-user RDP session broker for the COSMIC™ desktop environment.
 ///
 /// Accepts all RDP connections on a single port, extracts the username
 /// from the X.224 Connection Request cookie, spawns per-user
-/// `cosmic-rdp-server` instances, and proxies traffic to them.
+/// `cosmic-ext-rdp-server` instances, and proxies traffic to them.
 #[derive(Parser, Debug)]
-#[command(name = "cosmic-rdp-broker", version, about)]
+#[command(name = "cosmic-ext-rdp-broker", version, about)]
 struct Cli {
     /// Path to the broker configuration file (TOML).
     #[arg(long, short)]
@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
         port_range = %format!("{}-{}", cfg.port_range_start, cfg.port_range_end),
         max_sessions = cfg.max_sessions,
         idle_timeout = cfg.idle_timeout_secs,
-        "Starting cosmic-rdp-broker"
+        "Starting cosmic-ext-rdp-broker"
     );
 
     // Initialize the session registry.

@@ -13,7 +13,7 @@ pub struct PamAuthResult {
 /// Authenticate a user via PAM.
 ///
 /// Runs the PAM conversation in a blocking thread since PAM is
-/// synchronous. Uses the specified PAM service (e.g. "cosmic-rdp").
+/// synchronous. Uses the specified PAM service (e.g. "cosmic-ext-rdp").
 ///
 /// # Errors
 ///

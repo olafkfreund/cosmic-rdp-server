@@ -11,7 +11,7 @@
 }:
 
 rustPlatform.buildRustPackage {
-  pname = "cosmic-rdp-server";
+  pname = "cosmic-ext-rdp-server";
   version = "0.1.0";
 
   src = lib.fileset.toSource {
@@ -62,11 +62,11 @@ rustPlatform.buildRustPackage {
   '';
 
   meta = with lib; {
-    description = "RDP server for the COSMIC Desktop Environment";
-    homepage = "https://github.com/olafkfreund/cosmic-rdp-server";
+    description = "RDP server for the COSMIC desktop environment";
+    homepage = "https://github.com/olafkfreund/cosmic-ext-rdp-server";
     license = licenses.gpl3Only;
     maintainers = [ ];
     platforms = platforms.linux;
-    mainProgram = "cosmic-rdp-server";
+    mainProgram = "cosmic-ext-rdp-server";
   };
 }

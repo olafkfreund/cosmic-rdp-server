@@ -15,7 +15,7 @@ impl BrokerInterface {
     }
 }
 
-#[interface(name = "com.system76.CosmicRdpBroker")]
+#[interface(name = "io.github.olafkfreund.CosmicExtRdpBroker")]
 impl BrokerInterface {
     /// List all active sessions as JSON.
     async fn list_sessions(&self) -> String {

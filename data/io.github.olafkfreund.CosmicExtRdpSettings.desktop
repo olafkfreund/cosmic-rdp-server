@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=COSMIC RDP Server Settings
-Comment=Configure the COSMIC RDP Server
-Exec=cosmic-rdp-settings
+Name=RDP Server Settings
+Comment=Configure the RDP server for the COSMIC desktop
+Exec=cosmic-ext-rdp-settings
 Icon=preferences-desktop-remote-desktop
 Terminal=false
 Type=Application

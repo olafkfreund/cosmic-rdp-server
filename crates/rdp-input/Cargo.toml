@@ -1,6 +1,6 @@
 [package]
 name = "rdp-input"
-description = "Input injection abstraction for cosmic-rdp-server"
+description = "Input injection abstraction for cosmic-ext-rdp-server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

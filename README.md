@@ -1,4 +1,4 @@
-# cosmic-rdp-server
+# cosmic-ext-rdp-server
 
 Multi-user RDP server for the [COSMIC Desktop Environment](https://github.com/pop-os/cosmic-epoch). Provides concurrent remote desktop access for multiple users with per-session isolation, PAM authentication, and automatic session lifecycle management. Supports standard RDP clients such as Windows Remote Desktop (`mstsc.exe`), FreeRDP, and Remmina.
 
@@ -50,9 +50,9 @@ Workspace with 7 crates (v0.3.0):
 
 | Crate | Purpose |
 |-------|---------|
-| `cosmic-rdp-server` | Per-user daemon: CLI, config, TLS, D-Bus server, orchestration |
-| `cosmic-rdp-broker` | Multi-user session broker: TCP proxy, PAM auth, session lifecycle |
-| `cosmic-rdp-settings` | COSMIC Settings GUI: config editor, D-Bus status, nav pages |
+| `cosmic-ext-rdp-server` | Per-user daemon: CLI, config, TLS, D-Bus server, orchestration |
+| `cosmic-ext-rdp-broker` | Multi-user session broker: TCP proxy, PAM auth, session lifecycle |
+| `cosmic-ext-rdp-settings` | COSMIC Settings GUI: config editor, D-Bus status, nav pages |
 | `rdp-dbus` | Shared D-Bus types, config structs, client/server proxy |
 | `rdp-capture` | Screen capture via ScreenCast portal + PipeWire |
 | `rdp-input` | Input injection via reis/libei (direct libei protocol) |
@@ -60,7 +60,7 @@ Workspace with 7 crates (v0.3.0):
 
 ### Multi-user architecture
 
-The session broker accepts all RDP connections on port 3389, authenticates users via PAM, and spawns isolated per-user `cosmic-rdp-server` instances:
+The session broker accepts all RDP connections on port 3389, authenticates users via PAM, and spawns isolated per-user `cosmic-ext-rdp-server` instances:
 
 ```
 RDP Client A ──┐
@@ -68,15 +68,15 @@ RDP Client B ──┤  TCP :3389
 RDP Client C ──┘
        │
        ▼
-cosmic-rdp-broker (system service, root)
+cosmic-ext-rdp-broker (system service, root)
        ├── Read X.224 Connection Request → extract cookie username
        ├── PAM authentication
        ├── Spawn per-user server via systemd-run
        └── TCP proxy (bidirectional byte-level forwarding)
             │
-            ├── cosmic-rdp-server :3390 (user A's session)
-            ├── cosmic-rdp-server :3391 (user B's session)
-            └── cosmic-rdp-server :3392 (user C's session)
+            ├── cosmic-ext-rdp-server :3390 (user A's session)
+            ├── cosmic-ext-rdp-server :3391 (user B's session)
+            └── cosmic-ext-rdp-server :3392 (user C's session)
 ```
 
 Each per-user server inherits the user's environment (WAYLAND_DISPLAY, XDG_RUNTIME_DIR, DBUS_SESSION_BUS_ADDRESS) so all portals and PipeWire work transparently.
@@ -87,13 +87,13 @@ Each per-user server inherits the user's environment (WAYLAND_DISPLAY, XDG_RUNTI
 RDP Client
     |
     v
-cosmic-rdp-server (per-user daemon)
+cosmic-ext-rdp-server (per-user daemon)
     |
     |-- ScreenCast portal --> PipeWire --> rdp-capture --> rdp-encode --> EGFX H.264 or bitmap
     |-- RemoteDesktop portal --> EIS socket --> rdp-input --> compositor keyboard/mouse
     |-- CLIPRDR channel <--> arboard --> system clipboard
     |-- RDPSND channel <-- PipeWire audio monitor
-    |-- D-Bus IPC <--> cosmic-rdp-settings (GUI)
+    |-- D-Bus IPC <--> cosmic-ext-rdp-settings (GUI)
     v
 ironrdp-server (RDP protocol)
 ```
@@ -114,8 +114,8 @@ The encoder auto-detects hardware acceleration in priority order: VAAPI (Intel/A
 
 | Interface | Bus | Purpose |
 |-----------|-----|---------|
-| `com.system76.CosmicRdpBroker` | System | Session broker: list/terminate sessions, session count |
-| `com.system76.CosmicRdpServer` | Session | Per-user daemon: status, reload, stop (settings GUI IPC) |
+| `io.github.olafkfreund.CosmicExtRdpBroker` | System | Session broker: list/terminate sessions, session count |
+| `io.github.olafkfreund.CosmicExtRdpServer` | Session | Per-user daemon: status, reload, stop (settings GUI IPC) |
 | `org.freedesktop.impl.portal.RemoteDesktop` | Session | Portal for input injection (called by rdp-input) |
 | `org.freedesktop.impl.portal.ScreenCast` | Session | Portal for screen capture (called by rdp-capture) |
 
@@ -146,8 +146,8 @@ just test                # Run tests
 
 # Or build directly with Nix
 nix build                           # Build server
-nix build .#cosmic-rdp-settings     # Build settings GUI
-nix build .#cosmic-rdp-broker       # Build session broker
+nix build .#cosmic-ext-rdp-settings     # Build settings GUI
+nix build .#cosmic-ext-rdp-broker       # Build session broker
 ```
 
 ### Using Cargo (requires system libraries)
@@ -210,12 +210,12 @@ Create a `PKGBUILD`:
 
 ```bash
 # Maintainer: Your Name <you@example.com>
-pkgname=cosmic-rdp-server
+pkgname=cosmic-ext-rdp-server
 pkgver=0.3.0
 pkgrel=1
 pkgdesc="RDP server for the COSMIC Desktop Environment"
 arch=('x86_64' 'aarch64')
-url="https://github.com/olafkfreund/cosmic-rdp-server"
+url="https://github.com/olafkfreund/cosmic-ext-rdp-server"
 license=('GPL-3.0-only')
 depends=('pipewire' 'libei' 'wayland' 'libxkbcommon' 'gstreamer' 'gst-plugins-base'
          'gst-plugins-good' 'gst-plugins-bad' 'gst-plugin-va' 'openssl' 'dbus')
@@ -257,7 +257,7 @@ mkdir -p debian/source
 
 **`debian/control`:**
 ```
-Source: cosmic-rdp-server
+Source: cosmic-ext-rdp-server
 Section: net
 Priority: optional
 Maintainer: Your Name <you@example.com>
@@ -267,9 +267,9 @@ Build-Depends: debhelper-compat (= 13), cargo, rustc (>= 1.85),
  libgstreamer-plugins-base1.0-dev, libssl-dev, libfontconfig-dev,
  libfreetype-dev, libgl-dev, libvulkan-dev, libdbus-1-dev
 Standards-Version: 4.7.0
-Homepage: https://github.com/olafkfreund/cosmic-rdp-server
+Homepage: https://github.com/olafkfreund/cosmic-ext-rdp-server
 
-Package: cosmic-rdp-server
+Package: cosmic-ext-rdp-server
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, pipewire, libei1,
  gstreamer1.0-plugins-base, gstreamer1.0-plugins-good,
@@ -291,12 +291,12 @@ override_dh_auto_build:
 	just build-settings-release
 
 override_dh_auto_install:
-	just rootdir=debian/cosmic-rdp-server install-all
+	just rootdir=debian/cosmic-ext-rdp-server install-all
 ```
 
 **`debian/changelog`:**
 ```
-cosmic-rdp-server (0.3.0-1) unstable; urgency=medium
+cosmic-ext-rdp-server (0.3.0-1) unstable; urgency=medium
 
   * Multi-user multi-session broker (PAM auth, per-user isolation).
   * H.264 EGFX streaming with correct colors.
@@ -325,19 +325,19 @@ debuild -us -uc -b
 
 ```bash
 # Start the server with defaults (binds to 0.0.0.0:3389, self-signed TLS)
-cosmic-rdp-server
+cosmic-ext-rdp-server
 
 # Specify a custom address and port
-cosmic-rdp-server --addr 0.0.0.0 --port 13389
+cosmic-ext-rdp-server --addr 0.0.0.0 --port 13389
 
 # Use a custom TLS certificate
-cosmic-rdp-server --cert /path/to/cert.pem --key /path/to/key.pem
+cosmic-ext-rdp-server --cert /path/to/cert.pem --key /path/to/key.pem
 
 # Use a configuration file
-cosmic-rdp-server --config /path/to/config.toml
+cosmic-ext-rdp-server --config /path/to/config.toml
 
 # Start with a static blue screen (for testing, no portal needed)
-cosmic-rdp-server --static-display
+cosmic-ext-rdp-server --static-display
 ```
 
 ### CLI options
@@ -376,7 +376,7 @@ mstsc /v:hostname:3389
 
 ## Configuration
 
-Configuration is read from TOML. Default location: `$XDG_CONFIG_HOME/cosmic-rdp-server/config.toml` (`~/.config/cosmic-rdp-server/config.toml`).
+Configuration is read from TOML. Default location: `$XDG_CONFIG_HOME/cosmic-ext-rdp-server/config.toml` (`~/.config/cosmic-ext-rdp-server/config.toml`).
 
 ### Full example
 
@@ -385,8 +385,8 @@ Configuration is read from TOML. Default location: `$XDG_CONFIG_HOME/cosmic-rdp-
 bind = "0.0.0.0:3389"
 
 # TLS (omit for self-signed)
-# cert_path = "/etc/cosmic-rdp-server/cert.pem"
-# key_path = "/etc/cosmic-rdp-server/key.pem"
+# cert_path = "/etc/cosmic-ext-rdp-server/cert.pem"
+# key_path = "/etc/cosmic-ext-rdp-server/key.pem"
 
 # Static blue screen mode (for testing)
 static_display = false
@@ -466,27 +466,27 @@ channels = 2
 
 ### Session Broker Configuration
 
-The multi-user session broker (`cosmic-rdp-broker`) has its own TOML configuration. Default: `/etc/cosmic-rdp-broker/config.toml`
+The multi-user session broker (`cosmic-ext-rdp-broker`) has its own TOML configuration. Default: `/etc/cosmic-ext-rdp-broker/config.toml`
 
 ```toml
 bind = "0.0.0.0:3389"
-server_binary = "/usr/bin/cosmic-rdp-server"
+server_binary = "/usr/bin/cosmic-ext-rdp-server"
 port_range_start = 3390
 port_range_end = 3489
-pam_service = "cosmic-rdp"
+pam_service = "cosmic-ext-rdp"
 idle_timeout_secs = 3600
 max_sessions = 100
 session_policy = "OnePerUser"   # or "ReplaceExisting"
-state_file = "/var/lib/cosmic-rdp-broker/sessions.json"
+state_file = "/var/lib/cosmic-ext-rdp-broker/sessions.json"
 ```
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `bind` | string | `"0.0.0.0:3389"` | Address and port for the broker to listen on |
-| `server_binary` | string | auto | Path to the `cosmic-rdp-server` binary |
+| `server_binary` | string | auto | Path to the `cosmic-ext-rdp-server` binary |
 | `port_range_start` | int | `3390` | Start of the port range for per-user sessions |
 | `port_range_end` | int | `3489` | End of the port range (supports up to 100 concurrent users) |
-| `pam_service` | string | `"cosmic-rdp"` | PAM service name for authentication |
+| `pam_service` | string | `"cosmic-ext-rdp"` | PAM service name for authentication |
 | `idle_timeout_secs` | int | `3600` | Seconds of idle time before a session is terminated |
 | `max_sessions` | int | `100` | Maximum number of concurrent user sessions |
 | `session_policy` | string | `"OnePerUser"` | `OnePerUser` reconnects to existing sessions; `ReplaceExisting` terminates old sessions |
@@ -502,16 +502,16 @@ The flake provides a NixOS module for declarative configuration.
 
 ```nix
 {
-  inputs.cosmic-rdp-server.url = "github:olafkfreund/cosmic-rdp-server";
+  inputs.cosmic-ext-rdp-server.url = "github:olafkfreund/cosmic-ext-rdp-server";
 
-  outputs = { self, nixpkgs, cosmic-rdp-server, ... }: {
+  outputs = { self, nixpkgs, cosmic-ext-rdp-server, ... }: {
     nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
       modules = [
-        cosmic-rdp-server.nixosModules.default
+        cosmic-ext-rdp-server.nixosModules.default
         {
-          nixpkgs.overlays = [ cosmic-rdp-server.overlays.default ];
+          nixpkgs.overlays = [ cosmic-ext-rdp-server.overlays.default ];
 
-          services.cosmic-rdp-server = {
+          services.cosmic-ext-rdp-server = {
             enable = true;
             openFirewall = true;
 
@@ -532,7 +532,7 @@ The flake provides a NixOS module for declarative configuration.
 #### With NLA authentication
 
 ```nix
-services.cosmic-rdp-server = {
+services.cosmic-ext-rdp-server = {
   enable = true;
   openFirewall = true;
 
@@ -541,7 +541,7 @@ services.cosmic-rdp-server = {
     username = "rdpuser";
     # Password is loaded via systemd LoadCredential (never in Nix store).
     # Compatible with agenix, sops-nix, or any file-based secrets manager.
-    passwordFile = "/run/agenix/cosmic-rdp-password";
+    passwordFile = "/run/agenix/cosmic-ext-rdp-password";
   };
 
   settings = {
@@ -555,9 +555,9 @@ services.cosmic-rdp-server = {
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enable` | bool | `false` | Enable the COSMIC RDP Server service |
-| `package` | package | `pkgs.cosmic-rdp-server` | Server package to use |
+| `package` | package | `pkgs.cosmic-ext-rdp-server` | Server package to use |
 | `installSettings` | bool | `true` | Install the COSMIC Settings GUI |
-| `settingsPackage` | package | `pkgs.cosmic-rdp-settings` | Settings GUI package |
+| `settingsPackage` | package | `pkgs.cosmic-ext-rdp-settings` | Settings GUI package |
 | `openFirewall` | bool | `false` | Open the RDP port in the firewall |
 | `auth.enable` | bool | `false` | Enable NLA authentication |
 | `auth.username` | string | `""` | NLA username |
@@ -572,7 +572,7 @@ The systemd service runs as a user service (`graphical-session.target`) with sec
 For multi-user remote desktop access, enable the session broker alongside the per-user server:
 
 ```nix
-services.cosmic-rdp-broker = {
+services.cosmic-ext-rdp-broker = {
   enable = true;
   openFirewall = true;
 
@@ -586,7 +586,7 @@ services.cosmic-rdp-broker = {
 };
 ```
 
-The broker runs as a system service (root) to perform PAM authentication and spawn per-user sessions via `systemd-run`. It automatically configures PAM and creates a systemd slice (`cosmic-rdp-sessions.slice`) with resource limits (8 GB memory, 4096 tasks) for all RDP sessions combined.
+The broker runs as a system service (root) to perform PAM authentication and spawn per-user sessions via `systemd-run`. It automatically configures PAM and creates a systemd slice (`cosmic-ext-rdp-sessions.slice`) with resource limits (8 GB memory, 4096 tasks) for all RDP sessions combined.
 
 ### Home Manager Module
 
@@ -596,16 +596,16 @@ For user-level installation without system-wide NixOS changes.
 
 ```nix
 {
-  inputs.cosmic-rdp-server.url = "github:olafkfreund/cosmic-rdp-server";
+  inputs.cosmic-ext-rdp-server.url = "github:olafkfreund/cosmic-ext-rdp-server";
 
-  outputs = { self, nixpkgs, home-manager, cosmic-rdp-server, ... }: {
+  outputs = { self, nixpkgs, home-manager, cosmic-ext-rdp-server, ... }: {
     homeConfigurations."user" = home-manager.lib.homeManagerConfiguration {
       modules = [
-        cosmic-rdp-server.homeManagerModules.default
+        cosmic-ext-rdp-server.homeManagerModules.default
         {
-          nixpkgs.overlays = [ cosmic-rdp-server.overlays.default ];
+          nixpkgs.overlays = [ cosmic-ext-rdp-server.overlays.default ];
 
-          services.cosmic-rdp-server = {
+          services.cosmic-ext-rdp-server = {
             enable = true;
             autoStart = true;
 
@@ -625,14 +625,14 @@ For user-level installation without system-wide NixOS changes.
 #### With NLA authentication (Home Manager)
 
 ```nix
-services.cosmic-rdp-server = {
+services.cosmic-ext-rdp-server = {
   enable = true;
   autoStart = true;
 
   auth = {
     enable = true;
     username = "rdpuser";
-    passwordFile = "/run/agenix/cosmic-rdp-password";
+    passwordFile = "/run/agenix/cosmic-ext-rdp-password";
   };
 
   settings.bind = "0.0.0.0:3389";
@@ -644,9 +644,9 @@ services.cosmic-rdp-server = {
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enable` | bool | `false` | Enable the COSMIC RDP Server |
-| `package` | package | `pkgs.cosmic-rdp-server` | Server package to use |
+| `package` | package | `pkgs.cosmic-ext-rdp-server` | Server package to use |
 | `installSettings` | bool | `true` | Install the COSMIC Settings GUI |
-| `settingsPackage` | package | `pkgs.cosmic-rdp-settings` | Settings GUI package |
+| `settingsPackage` | package | `pkgs.cosmic-ext-rdp-settings` | Settings GUI package |
 | `autoStart` | bool | `false` | Start with the graphical session |
 | `auth.enable` | bool | `false` | Enable NLA authentication |
 | `auth.username` | string | `""` | NLA username |
@@ -683,7 +683,7 @@ For a complete remote desktop setup on COSMIC, you need three components working
                                     AcceptEisSocket(fd)
                                                 |
 +------------+     +-------------------+     +--+--------------------------+
-| RDP Client | --> | cosmic-rdp-server | --> | xdg-desktop-portal-cosmic   |
+| RDP Client | --> | cosmic-ext-rdp-server | --> | xdg-desktop-portal-cosmic   |
 | (mstsc,    |     | (this repo)       |     | (RemoteDesktop + ScreenCast)|
 | FreeRDP,   | <-- | RDP protocol,     | <-- | EIS socket pairs,          |
 | Remmina)   |     | TLS, auth         |     | PipeWire streams            |
@@ -692,13 +692,13 @@ For a complete remote desktop setup on COSMIC, you need three components working
 
 | Component | Repository | Purpose |
 |-----------|-----------|---------|
-| [cosmic-rdp-server](https://github.com/olafkfreund/cosmic-rdp-server) | This repo | RDP protocol server, capture + input orchestration |
+| [cosmic-ext-rdp-server](https://github.com/olafkfreund/cosmic-ext-rdp-server) | This repo | RDP protocol server, capture + input orchestration |
 | [xdg-desktop-portal-cosmic](https://github.com/olafkfreund/xdg-desktop-portal-cosmic) | Portal fork | RemoteDesktop + ScreenCast portal interfaces |
 | [cosmic-comp-rdp](https://github.com/olafkfreund/cosmic-comp-rdp) | Compositor fork | EIS receiver for input injection |
 
 ### How the components interact
 
-1. **cosmic-rdp-server** starts and calls the **RemoteDesktop** portal to request input injection and the **ScreenCast** portal to request screen capture
+1. **cosmic-ext-rdp-server** starts and calls the **RemoteDesktop** portal to request input injection and the **ScreenCast** portal to request screen capture
 2. **xdg-desktop-portal-cosmic** shows a consent dialog, creates a UNIX socket pair for EIS, and sends the server-side fd to the compositor
 3. **cosmic-comp-rdp** receives the EIS socket via D-Bus (`AcceptEisSocket`) and creates a seat with keyboard, pointer, and touch capabilities
 4. The RDP server receives the client-side EIS socket via `ConnectToEIS` and sends input events through it
@@ -709,20 +709,20 @@ For a complete remote desktop setup on COSMIC, you need three components working
 ```nix
 {
   inputs = {
-    cosmic-rdp-server.url = "github:olafkfreund/cosmic-rdp-server";
+    cosmic-ext-rdp-server.url = "github:olafkfreund/cosmic-ext-rdp-server";
     xdg-desktop-portal-cosmic.url = "github:olafkfreund/xdg-desktop-portal-cosmic";
     cosmic-comp.url = "github:olafkfreund/cosmic-comp-rdp";
   };
 
-  outputs = { self, nixpkgs, cosmic-rdp-server, xdg-desktop-portal-cosmic, cosmic-comp, ... }: {
+  outputs = { self, nixpkgs, cosmic-ext-rdp-server, xdg-desktop-portal-cosmic, cosmic-comp, ... }: {
     nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
       modules = [
-        cosmic-rdp-server.nixosModules.default
+        cosmic-ext-rdp-server.nixosModules.default
         xdg-desktop-portal-cosmic.nixosModules.default
         cosmic-comp.nixosModules.default
         {
           nixpkgs.overlays = [
-            cosmic-rdp-server.overlays.default
+            cosmic-ext-rdp-server.overlays.default
             xdg-desktop-portal-cosmic.overlays.default
             cosmic-comp.overlays.default
           ];
@@ -734,7 +734,7 @@ For a complete remote desktop setup on COSMIC, you need three components working
           services.xdg-desktop-portal-cosmic.enable = true;
 
           # RDP server
-          services.cosmic-rdp-server = {
+          services.cosmic-ext-rdp-server = {
             enable = true;
             openFirewall = true;
             settings.bind = "0.0.0.0:3389";
@@ -751,25 +751,25 @@ For a complete remote desktop setup on COSMIC, you need three components working
 ```nix
 {
   inputs = {
-    cosmic-rdp-server.url = "github:olafkfreund/cosmic-rdp-server";
+    cosmic-ext-rdp-server.url = "github:olafkfreund/cosmic-ext-rdp-server";
     xdg-desktop-portal-cosmic.url = "github:olafkfreund/xdg-desktop-portal-cosmic";
     cosmic-comp.url = "github:olafkfreund/cosmic-comp-rdp";
   };
 
-  outputs = { self, nixpkgs, home-manager, cosmic-rdp-server, xdg-desktop-portal-cosmic, cosmic-comp, ... }: {
+  outputs = { self, nixpkgs, home-manager, cosmic-ext-rdp-server, xdg-desktop-portal-cosmic, cosmic-comp, ... }: {
     homeConfigurations."user" = home-manager.lib.homeManagerConfiguration {
       modules = [
-        cosmic-rdp-server.homeManagerModules.default
+        cosmic-ext-rdp-server.homeManagerModules.default
         xdg-desktop-portal-cosmic.homeManagerModules.default
         cosmic-comp.homeManagerModules.default
         {
           nixpkgs.overlays = [
-            cosmic-rdp-server.overlays.default
+            cosmic-ext-rdp-server.overlays.default
             xdg-desktop-portal-cosmic.overlays.default
             cosmic-comp.overlays.default
           ];
 
-          services.cosmic-rdp-server = {
+          services.cosmic-ext-rdp-server = {
             enable = true;
             autoStart = true;
             settings.bind = "0.0.0.0:3389";
@@ -789,7 +789,7 @@ For a complete remote desktop setup on COSMIC, you need three components working
 
 All three repositories are tested together and use compatible dependency versions:
 
-| Dependency | cosmic-rdp-server | xdg-desktop-portal-cosmic | cosmic-comp-rdp |
+| Dependency | cosmic-ext-rdp-server | xdg-desktop-portal-cosmic | cosmic-comp-rdp |
 |------------|-------------------|---------------------------|-----------------|
 | reis (libei) | 0.5 | 0.5 | 0.5 |
 | zbus (D-Bus) | 5.x | 5.x | 5.x |
@@ -799,19 +799,19 @@ All three repositories are tested together and use compatible dependency version
 D-Bus interface chain (verified compatible):
 - Portal exposes `org.freedesktop.impl.portal.RemoteDesktop` with `ConnectToEIS`
 - Portal calls `com.system76.CosmicComp.RemoteDesktop.AcceptEisSocket(fd)` on the compositor
-- RDP server exposes `com.system76.CosmicRdpServer` for settings GUI IPC
+- RDP server exposes `io.github.olafkfreund.CosmicExtRdpServer` for settings GUI IPC
 
 ## D-Bus Interface
 
-**Per-user daemon** (`com.system76.CosmicRdpServer` on the session bus):
+**Per-user daemon** (`io.github.olafkfreund.CosmicExtRdpServer` on the session bus):
 
 - **Properties:** `Status` (Running/Stopped/Error), `BindAddress`
 - **Methods:** `Reload`, `Stop`
 - **Signals:** Status change notifications
 
-The settings GUI (`cosmic-rdp-settings`) communicates with the daemon over this interface to display server status and trigger configuration reloads.
+The settings GUI (`cosmic-ext-rdp-settings`) communicates with the daemon over this interface to display server status and trigger configuration reloads.
 
-**Session broker** (`com.system76.CosmicRdpBroker` on the system bus):
+**Session broker** (`io.github.olafkfreund.CosmicExtRdpBroker` on the system bus):
 
 - **Methods:** `ListSessions` (returns all active sessions), `TerminateSession(username)`, `ActiveSessionCount`
 
@@ -823,13 +823,13 @@ The server uses `tracing` with `RUST_LOG` environment variable support:
 
 ```bash
 # Default (info level)
-cosmic-rdp-server
+cosmic-ext-rdp-server
 
 # Debug logging
-RUST_LOG=debug cosmic-rdp-server
+RUST_LOG=debug cosmic-ext-rdp-server
 
 # Trace logging for specific crates
-RUST_LOG=rdp_capture=trace,rdp_input=debug cosmic-rdp-server
+RUST_LOG=rdp_capture=trace,rdp_input=debug cosmic-ext-rdp-server
 ```
 
 ## Troubleshooting
@@ -846,11 +846,11 @@ RUST_LOG=rdp_capture=trace,rdp_input=debug cosmic-rdp-server
 - Ensure `xdg-desktop-portal-cosmic` with RemoteDesktop support is installed
 - Ensure `cosmic-comp-rdp` with EIS receiver is running as the compositor
 - Check the consent dialog was accepted (the portal shows a dialog on first connection)
-- Check logs: `RUST_LOG=rdp_input=debug cosmic-rdp-server`
+- Check logs: `RUST_LOG=rdp_input=debug cosmic-ext-rdp-server`
 
 ### Connection refused
 
-- Check the server is running: `systemctl --user status cosmic-rdp-server`
+- Check the server is running: `systemctl --user status cosmic-ext-rdp-server`
 - Check firewall rules: port 3389 (or custom port) must be open
 - For NixOS: set `openFirewall = true` in the module configuration
 
@@ -870,7 +870,7 @@ RUST_LOG=rdp_capture=trace,rdp_input=debug cosmic-rdp-server
 
 - **Dynamic resize:** Resize during an active EGFX session may trigger a reconnection loop; bitmap-mode resize works correctly
 - **Cursor shapes:** SPA cursor metadata extraction requires unsafe FFI not yet implemented; cursor position is forwarded but custom cursor bitmaps from PipeWire are stubbed
-- **Unicode input:** Full IME/compose input is not yet supported ([#23](https://github.com/olafkfreund/cosmic-rdp-server/issues/23)); common control characters (Backspace, Tab, Enter, Escape, Delete) sent as Unicode events are handled
+- **Unicode input:** Full IME/compose input is not yet supported ([#23](https://github.com/olafkfreund/cosmic-ext-rdp-server/issues/23)); common control characters (Backspace, Tab, Enter, Escape, Delete) sent as Unicode events are handled
 
 ## License
 
