@@ -157,13 +157,11 @@ impl FrameCompositor {
                 }
             }
 
-            if any_new {
-                // Compose all latest frames into a single canvas.
-                if let Some(composed) = self.compose(&latest_frames) {
-                    if self.output_tx.try_send(CaptureEvent::Frame(composed)).is_err() {
-                        tracing::trace!("Compositor output channel full");
-                    }
-                }
+            if any_new
+                && let Some(composed) = self.compose(&latest_frames)
+                && self.output_tx.try_send(CaptureEvent::Frame(composed)).is_err()
+            {
+                tracing::trace!("Compositor output channel full");
             }
 
             // Sleep briefly to avoid busy-waiting.

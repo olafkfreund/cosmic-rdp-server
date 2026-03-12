@@ -111,18 +111,18 @@ impl App {
         if let Err(_e) = self.fps.parse::<u32>() {
             return Some("FPS must be a positive number".to_string());
         }
-        if let Ok(fps) = self.fps.parse::<u32>() {
-            if fps == 0 || fps > 240 {
-                return Some("FPS must be between 1 and 240".to_string());
-            }
+        if let Ok(fps) = self.fps.parse::<u32>()
+            && (fps == 0 || fps > 240)
+        {
+            return Some("FPS must be between 1 and 240".to_string());
         }
         if let Err(_e) = self.bitrate_mbps.parse::<f64>() {
             return Some("Bitrate must be a number (Mbps)".to_string());
         }
-        if let Ok(mbps) = self.bitrate_mbps.parse::<f64>() {
-            if mbps <= 0.0 || mbps > 100.0 {
-                return Some("Bitrate must be between 0.1 and 100 Mbps".to_string());
-            }
+        if let Ok(mbps) = self.bitrate_mbps.parse::<f64>()
+            && (mbps <= 0.0 || mbps > 100.0)
+        {
+            return Some("Bitrate must be between 0.1 and 100 Mbps".to_string());
         }
         if let Err(_e) = self.buffer_capacity.parse::<usize>() {
             return Some("Buffer capacity must be a positive number".to_string());

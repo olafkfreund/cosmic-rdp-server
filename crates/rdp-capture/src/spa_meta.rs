@@ -31,58 +31,61 @@ pub unsafe fn extract_damage(
         return None;
     }
 
-    let buffer = &*spa_buffer;
-    if buffer.n_metas == 0 || buffer.metas.is_null() {
-        return None;
-    }
-
-    let metas = std::slice::from_raw_parts(buffer.metas, buffer.n_metas as usize);
-
-    for meta in metas {
-        if meta.type_ != spa_sys::SPA_META_VideoDamage {
-            continue;
-        }
-
-        if meta.data.is_null() || meta.size == 0 {
+    // SAFETY: caller guarantees spa_buffer is valid for the duration of this call.
+    unsafe {
+        let buffer = &*spa_buffer;
+        if buffer.n_metas == 0 || buffer.metas.is_null() {
             return None;
         }
 
-        let region_size = std::mem::size_of::<spa_sys::spa_meta_region>();
-        let max_regions = meta.size as usize / region_size;
+        let metas = std::slice::from_raw_parts(buffer.metas, buffer.n_metas as usize);
 
-        if max_regions == 0 {
-            return None;
-        }
-
-        let regions = meta.data.cast::<spa_sys::spa_meta_region>();
-        let mut damage_rects = Vec::new();
-
-        for i in 0..max_regions {
-            let region = &*regions.add(i);
-            let w = region.region.size.width;
-            let h = region.region.size.height;
-
-            // Zero-size region marks end of array (per SPA spec).
-            if w == 0 && h == 0 {
-                break;
+        for meta in metas {
+            if meta.type_ != spa_sys::SPA_META_VideoDamage {
+                continue;
             }
 
-            damage_rects.push(DamageRect::new(
-                region.region.position.x,
-                region.region.position.y,
-                w,
-                h,
-            ));
+            if meta.data.is_null() || meta.size == 0 {
+                return None;
+            }
+
+            let region_size = std::mem::size_of::<spa_sys::spa_meta_region>();
+            let max_regions = meta.size as usize / region_size;
+
+            if max_regions == 0 {
+                return None;
+            }
+
+            let regions = meta.data.cast::<spa_sys::spa_meta_region>();
+            let mut damage_rects = Vec::new();
+
+            for i in 0..max_regions {
+                let region = &*regions.add(i);
+                let w = region.region.size.width;
+                let h = region.region.size.height;
+
+                // Zero-size region marks end of array (per SPA spec).
+                if w == 0 && h == 0 {
+                    break;
+                }
+
+                damage_rects.push(DamageRect::new(
+                    region.region.position.x,
+                    region.region.position.y,
+                    w,
+                    h,
+                ));
+            }
+
+            tracing::trace!(
+                count = damage_rects.len(),
+                "Extracted damage rects from PipeWire metadata"
+            );
+            return Some(damage_rects);
         }
 
-        tracing::trace!(
-            count = damage_rects.len(),
-            "Extracted damage rects from PipeWire metadata"
-        );
-        return Some(damage_rects);
+        None
     }
-
-    None
 }
 
 /// Extract cursor metadata from a `PipeWire` buffer's `SPA_META_Cursor` metadata.
@@ -105,47 +108,50 @@ pub unsafe fn extract_cursor(
         return None;
     }
 
-    let buffer = &*spa_buffer;
-    if buffer.n_metas == 0 || buffer.metas.is_null() {
-        return None;
-    }
-
-    let metas = std::slice::from_raw_parts(buffer.metas, buffer.n_metas as usize);
-
-    for meta in metas {
-        if meta.type_ != spa_sys::SPA_META_Cursor {
-            continue;
-        }
-
-        if meta.data.is_null()
-            || (meta.size as usize) < std::mem::size_of::<spa_sys::spa_meta_cursor>()
-        {
+    // SAFETY: caller guarantees spa_buffer is valid for the duration of this call.
+    unsafe {
+        let buffer = &*spa_buffer;
+        if buffer.n_metas == 0 || buffer.metas.is_null() {
             return None;
         }
 
-        let cursor = &*(meta.data.cast::<spa_sys::spa_meta_cursor>());
+        let metas = std::slice::from_raw_parts(buffer.metas, buffer.n_metas as usize);
 
-        // id == 0 means no cursor data (cursor left the captured region).
-        if cursor.id == 0 {
+        for meta in metas {
+            if meta.type_ != spa_sys::SPA_META_Cursor {
+                continue;
+            }
+
+            if meta.data.is_null()
+                || (meta.size as usize) < std::mem::size_of::<spa_sys::spa_meta_cursor>()
+            {
+                return None;
+            }
+
+            let cursor = &*(meta.data.cast::<spa_sys::spa_meta_cursor>());
+
+            // id == 0 means no cursor data (cursor left the captured region).
+            if cursor.id == 0 {
+                return Some(CursorInfo {
+                    x: cursor.position.x,
+                    y: cursor.position.y,
+                    visible: false,
+                    bitmap: None,
+                });
+            }
+
+            let bitmap = extract_cursor_bitmap(meta.data, cursor);
+
             return Some(CursorInfo {
                 x: cursor.position.x,
                 y: cursor.position.y,
-                visible: false,
-                bitmap: None,
+                visible: true,
+                bitmap,
             });
         }
 
-        let bitmap = extract_cursor_bitmap(meta.data, cursor);
-
-        return Some(CursorInfo {
-            x: cursor.position.x,
-            y: cursor.position.y,
-            visible: true,
-            bitmap,
-        });
+        None
     }
-
-    None
 }
 
 /// Extract the cursor bitmap from a `spa_meta_cursor`, if present.
@@ -169,68 +175,72 @@ unsafe fn extract_cursor_bitmap(
         return None;
     }
 
-    #[allow(clippy::cast_ptr_alignment)] // SPA guarantees 4-byte aligned metadata
-    let bitmap_ptr = meta_data
-        .cast::<u8>()
-        .add(cursor.bitmap_offset as usize)
-        .cast::<spa_sys::spa_meta_bitmap>();
-    let bitmap = &*bitmap_ptr;
+    // SAFETY: caller guarantees meta_data points to valid memory with
+    // sufficient size for the bitmap offset and spa_meta_bitmap struct.
+    unsafe {
+        #[allow(clippy::cast_ptr_alignment)] // SPA guarantees 4-byte aligned metadata
+        let bitmap_ptr = meta_data
+            .cast::<u8>()
+            .add(cursor.bitmap_offset as usize)
+            .cast::<spa_sys::spa_meta_bitmap>();
+        let bitmap = &*bitmap_ptr;
 
-    // offset == 0 in the bitmap means no pixel data (invisible cursor).
-    if bitmap.offset == 0 {
-        return None;
-    }
+        // offset == 0 in the bitmap means no pixel data (invisible cursor).
+        if bitmap.offset == 0 {
+            return None;
+        }
 
-    let width = bitmap.size.width;
-    let height = bitmap.size.height;
+        let width = bitmap.size.width;
+        let height = bitmap.size.height;
 
-    if width == 0 || height == 0 {
-        return None;
-    }
+        if width == 0 || height == 0 {
+            return None;
+        }
 
-    // Validate format: we only handle ARGB8888.
-    if bitmap.format != spa_sys::SPA_VIDEO_FORMAT_ARGB {
-        tracing::debug!(
-            format = bitmap.format,
-            "Unsupported cursor bitmap format (expected ARGB8888)"
-        );
-        return None;
-    }
+        // Validate format: we only handle ARGB8888.
+        if bitmap.format != spa_sys::SPA_VIDEO_FORMAT_ARGB {
+            tracing::debug!(
+                format = bitmap.format,
+                "Unsupported cursor bitmap format (expected ARGB8888)"
+            );
+            return None;
+        }
 
-    let stride = bitmap.stride.unsigned_abs() as usize;
-    let expected_size = stride * height as usize;
+        let stride = bitmap.stride.unsigned_abs() as usize;
+        let expected_size = stride * height as usize;
 
-    // Read pixel data from the bitmap's offset field.
-    let pixel_ptr = bitmap_ptr
-        .cast::<u8>()
-        .add(bitmap.offset as usize);
-    let pixel_data = std::slice::from_raw_parts(pixel_ptr, expected_size);
+        // Read pixel data from the bitmap's offset field.
+        let pixel_ptr = bitmap_ptr
+            .cast::<u8>()
+            .add(bitmap.offset as usize);
+        let pixel_data = std::slice::from_raw_parts(pixel_ptr, expected_size);
 
-    // Convert ARGB8888 (A,R,G,B on big-endian / B,G,R,A on little-endian)
-    // to RGBA. On little-endian (x86), the memory layout for ARGB is
-    // [B, G, R, A] and we need [R, G, B, A].
-    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
-    for row in 0..height as usize {
-        let row_start = row * stride;
-        for col in 0..width as usize {
-            let px = row_start + col * 4;
-            if px + 3 < pixel_data.len() {
-                // ARGB on LE: [B, G, R, A] -> RGBA: [R, G, B, A]
-                rgba.push(pixel_data[px + 2]); // R
-                rgba.push(pixel_data[px + 1]); // G
-                rgba.push(pixel_data[px]);     // B
-                rgba.push(pixel_data[px + 3]); // A
+        // Convert ARGB8888 (A,R,G,B on big-endian / B,G,R,A on little-endian)
+        // to RGBA. On little-endian (x86), the memory layout for ARGB is
+        // [B, G, R, A] and we need [R, G, B, A].
+        let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+        for row in 0..height as usize {
+            let row_start = row * stride;
+            for col in 0..width as usize {
+                let px = row_start + col * 4;
+                if px + 3 < pixel_data.len() {
+                    // ARGB on LE: [B, G, R, A] -> RGBA: [R, G, B, A]
+                    rgba.push(pixel_data[px + 2]); // R
+                    rgba.push(pixel_data[px + 1]); // G
+                    rgba.push(pixel_data[px]);     // B
+                    rgba.push(pixel_data[px + 3]); // A
+                }
             }
         }
-    }
 
-    Some(CursorBitmap {
-        width,
-        height,
-        hot_x: cursor.hotspot.x.max(0) as u32,
-        hot_y: cursor.hotspot.y.max(0) as u32,
-        data: rgba,
-    })
+        Some(CursorBitmap {
+            width,
+            height,
+            hot_x: cursor.hotspot.x.max(0) as u32,
+            hot_y: cursor.hotspot.y.max(0) as u32,
+            data: rgba,
+        })
+    }
 }
 
 #[cfg(test)]

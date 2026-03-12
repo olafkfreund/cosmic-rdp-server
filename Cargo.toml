@@ -15,8 +15,8 @@ name = "cosmic-ext-rdp-server"
 
 [workspace.package]
 version = "0.4.0"
-edition = "2021"
-rust-version = "1.85"
+edition = "2024"
+rust-version = "1.89"
 license = "GPL-3.0-only"
 repository = "https://github.com/olafkfreund/cosmic-ext-rdp-server"
 authors = ["Olaf K. Freund"]
@@ -37,15 +37,15 @@ anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
-# RDP protocol (git fork with EGFX support)
-ironrdp-server = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP", features = ["helper"] }
-ironrdp-cliprdr = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
-ironrdp-core = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
-ironrdp-displaycontrol = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
-ironrdp-pdu = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
-ironrdp-rdpsnd = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
-ironrdp-dvc = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
-ironrdp-egfx = { git = "https://github.com/olafkfreund/cosmic-ext-IronRDP" }
+# RDP protocol (upstream IronRDP with native EGFX support)
+ironrdp-server = { git = "https://github.com/Devolutions/IronRDP", features = ["helper", "egfx"] }
+ironrdp-cliprdr = { git = "https://github.com/Devolutions/IronRDP" }
+ironrdp-core = { git = "https://github.com/Devolutions/IronRDP" }
+ironrdp-displaycontrol = { git = "https://github.com/Devolutions/IronRDP" }
+ironrdp-pdu = { git = "https://github.com/Devolutions/IronRDP" }
+ironrdp-rdpsnd = { git = "https://github.com/Devolutions/IronRDP" }
+ironrdp-dvc = { git = "https://github.com/Devolutions/IronRDP" }
+ironrdp-egfx = { git = "https://github.com/Devolutions/IronRDP" }
 
 # Async utilities
 async-trait = "0.1"

@@ -125,11 +125,11 @@ fn run_pipewire_loop(
                 // Parse the format pod to extract the negotiated video format.
                 if let Ok((_, pw::spa::pod::Value::Object(obj))) = pw::spa::pod::deserialize::PodDeserializer::deserialize_any_from(pod.as_bytes()) {
                     for prop in &obj.properties {
-                        if prop.key == pw::spa::param::format::FormatProperties::VideoFormat.as_raw() {
-                            if let pw::spa::pod::Value::Id(fmt_id) = prop.value {
-                                negotiated_format_cb.store(fmt_id.0, Ordering::SeqCst);
-                                tracing::info!(format_id = fmt_id.0, "PipeWire negotiated video format");
-                            }
+                        if prop.key == pw::spa::param::format::FormatProperties::VideoFormat.as_raw()
+                            && let pw::spa::pod::Value::Id(fmt_id) = prop.value
+                        {
+                            negotiated_format_cb.store(fmt_id.0, Ordering::SeqCst);
+                            tracing::info!(format_id = fmt_id.0, "PipeWire negotiated video format");
                         }
                     }
                 }
