@@ -250,7 +250,7 @@ impl CliprdrServerFactory for LocalClipboardFactory {}
 ///
 /// RDP clipboard text is always UTF-16LE with a null terminator.
 fn decode_utf16le_text(data: &[u8]) -> Option<String> {
-    if data.len() < 2 || data.len() % 2 != 0 {
+    if data.len() < 2 || !data.len().is_multiple_of(2) {
         return None;
     }
 

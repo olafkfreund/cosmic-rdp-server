@@ -28,6 +28,7 @@ ironrdp-pdu.workspace = true
 ironrdp-rdpsnd.workspace = true
 ironrdp-dvc.workspace = true
 ironrdp-egfx.workspace = true
+ironrdp-svc = { git = "https://github.com/Devolutions/IronRDP" }
 
 # Clipboard
 arboard.workspace = true

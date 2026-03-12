@@ -112,13 +112,12 @@ async fn main() -> Result<()> {
 
         let result = if cfg.static_display {
             tracing::info!("Using static display with EGFX color test pattern");
-            let (egfx_factory, egfx_controller, egfx_event_setter) =
+            let (egfx_factory, egfx_controller) =
                 egfx::create_egfx(1920, 1080);
             let rdp_server = server::build_server(
                 cfg.bind, &tls_ctx, auth.as_ref(), make_cliprdr(), make_sound(),
                 Some(Box::new(egfx_factory)),
             );
-            egfx_event_setter.set_event_sender(rdp_server.event_sender().clone());
             // Spawn background H.264 encoding task that sends a color test
             // pattern (RGBW quadrants) via EGFX when the client negotiates
             // AVC420. This allows testing the full encode→decode color
@@ -256,7 +255,7 @@ async fn run_live_or_fallback(
             let mut live_display = server::LiveDisplay::new(event_rx, &desktop_info);
 
             // Create EGFX components for H.264 delivery via DVC.
-            let (egfx_factory, egfx_controller, egfx_event_setter) =
+            let (egfx_factory, egfx_controller) =
                 egfx::create_egfx(desktop_info.width, desktop_info.height);
             live_display.set_egfx(egfx_controller);
 
@@ -280,21 +279,17 @@ async fn run_live_or_fallback(
                 cfg.bind, tls_ctx, auth, live_display, input_handler,
                 make_cliprdr(), make_sound(), Some(Box::new(egfx_factory)),
             );
-            // Set the event sender so the EGFX controller can push
-            // H.264 frames proactively via ServerEvent::DvcOutput.
-            egfx_event_setter.set_event_sender(rdp_server.event_sender().clone());
             let _capture = capture_handle;
             run_with_shutdown(rdp_server, dbus_cmd_rx).await
         }
         Err(e) => {
             tracing::warn!("Failed to start screen capture: {e:#}");
             tracing::info!("Falling back to static blue screen display");
-            let (egfx_factory, _egfx_controller, egfx_event_setter) =
+            let (egfx_factory, _egfx_controller) =
                 egfx::create_egfx(1920, 1080);
             let rdp_server =
                 server::build_server(cfg.bind, tls_ctx, auth, make_cliprdr(), make_sound(),
                     Some(Box::new(egfx_factory)));
-            egfx_event_setter.set_event_sender(rdp_server.event_sender().clone());
             run_with_shutdown(rdp_server, dbus_cmd_rx).await
         }
     }
@@ -489,11 +484,11 @@ fn save_restore_token(token: &str) {
     let Some(path) = restore_token_path() else {
         return;
     };
-    if let Some(parent) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            tracing::warn!("Failed to create restore token dir: {e}");
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        tracing::warn!("Failed to create restore token dir: {e}");
+        return;
     }
     if let Err(e) = std::fs::write(&path, token) {
         tracing::warn!("Failed to save restore token: {e}");

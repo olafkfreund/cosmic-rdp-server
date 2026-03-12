@@ -224,10 +224,10 @@ pub async fn idle_cleanup_task(registry: SessionRegistry, idle_timeout_secs: u64
         let idle_users = registry.idle_sessions(idle_timeout_secs).await;
         for username in idle_users {
             tracing::info!(%username, "Idle timeout reached, terminating session");
-            if let Some(entry) = registry.remove(&username).await {
-                if let Err(e) = spawner::stop_user_server(&entry.unit_name).await {
-                    tracing::warn!(%username, "Failed to stop idle session: {e}");
-                }
+            if let Some(entry) = registry.remove(&username).await
+                && let Err(e) = spawner::stop_user_server(&entry.unit_name).await
+            {
+                tracing::warn!(%username, "Failed to stop idle session: {e}");
             }
         }
 

@@ -177,7 +177,6 @@
           packages = buildDeps ++ nativeBuildDeps ++ guiNativeBuildDeps
             ++ runtimeDeps ++ guiRuntimeDeps ++ (with pkgs; [
             rust-analyzer
-            clippy
             rustfmt
             cargo-watch
             linux-pam

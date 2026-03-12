@@ -7,9 +7,9 @@ use ironrdp_displaycontrol::pdu::DisplayControlMonitorLayout;
 use ironrdp_pdu::input::fast_path::SynchronizeFlags;
 use ironrdp_pdu::pointer::PointerPositionAttribute;
 use ironrdp_server::{
-    BitmapUpdate, CliprdrServerFactory, DesktopSize, DisplayUpdate, KeyboardEvent, MouseEvent,
-    PixelFormat, RGBAPointer, RdpServer, RdpServerDisplay, RdpServerDisplayUpdates,
-    RdpServerInputHandler, SoundServerFactory,
+    BitmapUpdate, CliprdrServerFactory, DesktopSize, DisplayUpdate, GfxServerFactory,
+    KeyboardEvent, MouseEvent, PixelFormat, RGBAPointer, RdpServer, RdpServerDisplay,
+    RdpServerDisplayUpdates, RdpServerInputHandler, SoundServerFactory,
 };
 use rdp_capture::{CaptureEvent, CapturedFrame, CursorInfo, DesktopInfo};
 use rdp_encode::{EncoderConfig, GstEncoder};
@@ -375,18 +375,18 @@ impl RdpServerDisplay for LiveDisplay {
         // Route resize through EGFX ResetGraphics instead of
         // DisplayUpdate::Resize to avoid ironrdp-server 0.10's broken
         // deactivation-reactivation sequence.
-        if let Some(ref egfx) = self.egfx {
-            if egfx.is_ready() {
-                tracing::info!(
-                    width, height,
-                    old_width = self.width, old_height = self.height,
-                    "Resizing display via EGFX ResetGraphics"
-                );
-                egfx.resize(width, height);
-                self.width = width;
-                self.height = height;
-                return;
-            }
+        if let Some(ref egfx) = self.egfx
+            && egfx.is_ready()
+        {
+            tracing::info!(
+                width, height,
+                old_width = self.width, old_height = self.height,
+                "Resizing display via EGFX ResetGraphics"
+            );
+            egfx.resize(width, height);
+            self.width = width;
+            self.height = height;
+            return;
         }
 
         // EGFX not available or not ready — cannot resize safely.
@@ -617,6 +617,7 @@ fn cursor_to_display_update(cursor: &CursorInfo) -> DisplayUpdate {
     if let Some(ref bitmap) = cursor.bitmap {
         #[allow(clippy::cast_possible_truncation)]
         DisplayUpdate::RGBAPointer(RGBAPointer {
+            cache_index: 0,
             width: bitmap.width as u16,
             height: bitmap.height as u16,
             hot_x: bitmap.hot_x as u16,
@@ -692,7 +693,7 @@ pub fn build_server(
     auth: Option<&AuthCredentials>,
     cliprdr: Option<Box<dyn CliprdrServerFactory>>,
     sound: Option<Box<dyn SoundServerFactory>>,
-    egfx_factory: Option<Box<dyn ironrdp_dvc::DvcProcessorFactory>>,
+    gfx_factory: Option<Box<dyn GfxServerFactory>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
@@ -701,19 +702,17 @@ pub fn build_server(
         .with_display_handler(StaticDisplay::default())
         .with_cliprdr_factory(cliprdr)
         .with_sound_factory(sound)
+        .with_gfx_factory(gfx_factory)
         .build();
     apply_credentials(&mut server, auth);
-    if let Some(factory) = egfx_factory {
-        server.add_dvc_factory(factory);
-    }
     server
 }
 
 /// Build an RDP server with live screen capture and input injection.
 ///
-/// If `egfx_factory` is provided, it is registered as a DVC processor factory
-/// for EGFX/H.264 frame delivery through the DRDYNVC channel. A fresh
-/// processor is created for each RDP connection.
+/// If `gfx_factory` is provided, it is registered via the builder for
+/// EGFX/H.264 frame delivery through the DRDYNVC channel. A fresh
+/// `GfxDvcBridge` is created for each RDP connection.
 #[allow(clippy::too_many_arguments)]
 pub fn build_live_server(
     bind_addr: std::net::SocketAddr,
@@ -723,7 +722,7 @@ pub fn build_live_server(
     input_handler: LiveInputHandler,
     cliprdr: Option<Box<dyn CliprdrServerFactory>>,
     sound: Option<Box<dyn SoundServerFactory>>,
-    egfx_factory: Option<Box<dyn ironrdp_dvc::DvcProcessorFactory>>,
+    gfx_factory: Option<Box<dyn GfxServerFactory>>,
 ) -> RdpServer {
     let builder = RdpServer::builder().with_addr(bind_addr);
     let builder = with_security!(builder, tls, auth);
@@ -732,11 +731,9 @@ pub fn build_live_server(
         .with_display_handler(display)
         .with_cliprdr_factory(cliprdr)
         .with_sound_factory(sound)
+        .with_gfx_factory(gfx_factory)
         .build();
     apply_credentials(&mut server, auth);
-    if let Some(factory) = egfx_factory {
-        server.add_dvc_factory(factory);
-    }
     server
 }
 
