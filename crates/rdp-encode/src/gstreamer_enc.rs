@@ -45,6 +45,21 @@ impl std::fmt::Display for EncoderType {
     }
 }
 
+/// Parse an encoder type from a config string.
+///
+/// Recognized values: `"vaapi"`, `"nvenc"`, `"software"`, `"auto"`.
+/// Returns `None` for `"auto"` or unrecognized strings (caller should
+/// fall back to [`detect_best_encoder`]).
+#[must_use]
+pub fn encoder_type_from_str(s: &str) -> Option<EncoderType> {
+    match s.to_ascii_lowercase().as_str() {
+        "vaapi" => Some(EncoderType::Vaapi),
+        "nvenc" => Some(EncoderType::Nvenc),
+        "software" | "x264" => Some(EncoderType::Software),
+        _ => None,
+    }
+}
+
 /// Check if a `GStreamer` element factory is available.
 #[must_use]
 pub fn is_encoder_available(element_name: &str) -> bool {
@@ -401,11 +416,11 @@ fn configure_encoder(encoder: &gst::Element, encoder_type: EncoderType, config: 
 
     match encoder_type {
         EncoderType::Vaapi => {
-            encoder.set_property("rate-control", 2u32); // CBR
+            encoder.set_property_from_str("rate-control", "cbr");
             encoder.set_property("bitrate", bitrate_kbps);
             encoder.set_property("keyframe-period", config.keyframe_interval);
             if config.low_latency {
-                encoder.set_property("tune", 3u32); // low-latency
+                encoder.set_property_from_str("tune", "low-power");
             }
         }
         EncoderType::Nvenc => {

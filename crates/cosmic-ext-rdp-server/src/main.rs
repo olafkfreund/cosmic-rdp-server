@@ -253,6 +253,9 @@ async fn run_live_or_fallback(
             );
 
             let mut live_display = server::LiveDisplay::new(event_rx, &desktop_info);
+            live_display.set_encoder_preference(
+                rdp_encode::encoder_type_from_str(&cfg.encode.encoder),
+            );
 
             // Create EGFX components for H.264 delivery via DVC.
             let (egfx_factory, egfx_controller) =
