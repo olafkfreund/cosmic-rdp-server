@@ -19,6 +19,8 @@ pub enum EncoderType {
     Vaapi,
     /// NVIDIA NVENC hardware encoder (`nvh264enc`).
     Nvenc,
+    /// Vulkan Video hardware encoder (`vulkanh264enc`, GStreamer 1.28+).
+    VulkanVideo,
     /// x264 software encoder (`x264enc`).
     Software,
 }
@@ -30,6 +32,7 @@ impl EncoderType {
         match self {
             Self::Vaapi => "vaapih264enc",
             Self::Nvenc => "nvh264enc",
+            Self::VulkanVideo => "vulkanh264enc",
             Self::Software => "x264enc",
         }
     }
@@ -40,6 +43,7 @@ impl std::fmt::Display for EncoderType {
         match self {
             Self::Vaapi => write!(f, "VAAPI"),
             Self::Nvenc => write!(f, "NVENC"),
+            Self::VulkanVideo => write!(f, "Vulkan Video"),
             Self::Software => write!(f, "x264 (software)"),
         }
     }
@@ -47,7 +51,7 @@ impl std::fmt::Display for EncoderType {
 
 /// Parse an encoder type from a config string.
 ///
-/// Recognized values: `"vaapi"`, `"nvenc"`, `"software"`, `"auto"`.
+/// Recognized values: `"vaapi"`, `"nvenc"`, `"vulkan"`, `"software"`, `"auto"`.
 /// Returns `None` for `"auto"` or unrecognized strings (caller should
 /// fall back to [`detect_best_encoder`]).
 #[must_use]
@@ -55,6 +59,7 @@ pub fn encoder_type_from_str(s: &str) -> Option<EncoderType> {
     match s.to_ascii_lowercase().as_str() {
         "vaapi" => Some(EncoderType::Vaapi),
         "nvenc" => Some(EncoderType::Nvenc),
+        "vulkan" | "vulkan-video" | "vulkanvideo" => Some(EncoderType::VulkanVideo),
         "software" | "x264" => Some(EncoderType::Software),
         _ => None,
     }
@@ -68,7 +73,12 @@ pub fn is_encoder_available(element_name: &str) -> bool {
 
 /// Detect the best available H.264 encoder.
 ///
-/// Checks in priority order: VAAPI (hardware) -> NVENC (hardware) -> x264 (software).
+/// Checks in priority order:
+/// VAAPI (hardware) -> NVENC (hardware) -> Vulkan Video (hardware) -> x264 (software).
+///
+/// Vulkan Video (`vulkanh264enc`) is checked after VAAPI/NVENC because the
+/// vendor-specific encoders are more mature. When Vulkan Video drivers
+/// stabilize, this priority may change.
 ///
 /// # Panics
 ///
@@ -80,6 +90,8 @@ pub fn detect_best_encoder() -> EncoderType {
         EncoderType::Vaapi
     } else if is_encoder_available(EncoderType::Nvenc.element_name()) {
         EncoderType::Nvenc
+    } else if is_encoder_available(EncoderType::VulkanVideo.element_name()) {
+        EncoderType::VulkanVideo
     } else {
         EncoderType::Software
     }
@@ -422,6 +434,15 @@ fn configure_encoder(encoder: &gst::Element, encoder_type: EncoderType, config: 
             if config.low_latency {
                 encoder.set_property_from_str("tune", "low-power");
             }
+        }
+        EncoderType::VulkanVideo => {
+            // vulkanh264enc (GStreamer 1.28+) uses string-typed properties
+            // for rate control. Bitrate is in kbps.
+            encoder.set_property_from_str("rate-control", "cbr");
+            encoder.set_property("bitrate", bitrate_kbps);
+            #[allow(clippy::cast_possible_wrap)]
+            let gop = config.keyframe_interval as i32;
+            encoder.set_property("gop-size", gop);
         }
         EncoderType::Nvenc => {
             encoder.set_property("bitrate", bitrate_kbps);

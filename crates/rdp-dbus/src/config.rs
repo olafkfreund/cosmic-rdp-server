@@ -216,7 +216,7 @@ impl Default for ClipboardConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct EncodeConfig {
-    /// Preferred encoder: "vaapi", "nvenc", "software", or "auto".
+    /// Preferred encoder: "vaapi", "nvenc", "vulkan", "software", or "auto".
     pub encoder: String,
 
     /// H.264 encoding preset.
