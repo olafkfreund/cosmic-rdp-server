@@ -281,6 +281,8 @@ pub struct LiveDisplay {
     /// EGFX controller for H.264 delivery and resize (optional).
     /// Retained across connections (cloned into `LiveDisplayUpdates`).
     egfx: Option<EgfxController>,
+    /// Preferred encoder type from config (None = auto-detect).
+    encoder_preference: Option<rdp_encode::EncoderType>,
 }
 
 impl LiveDisplay {
@@ -296,12 +298,18 @@ impl LiveDisplay {
                 event_rx: Some(event_rx),
             })),
             egfx: None,
+            encoder_preference: None,
         }
     }
 
     /// Attach an EGFX controller for H.264 frame delivery.
     pub fn set_egfx(&mut self, controller: EgfxController) {
         self.egfx = Some(controller);
+    }
+
+    /// Set the preferred encoder type from the config file.
+    pub fn set_encoder_preference(&mut self, encoder_type: Option<rdp_encode::EncoderType>) {
+        self.encoder_preference = encoder_type;
     }
 }
 
@@ -341,10 +349,12 @@ impl RdpServerDisplay for LiveDisplay {
             channels: Arc::clone(&self.channels),
             pending_cursor: None,
             egfx,
+            encoder_preference: self.encoder_preference,
             encoder: None,
             encoder_width: 0,
             encoder_height: 0,
             frame_timestamp_ms: 0,
+            egfx_ready_waited: false,
             egfx_wait_frames: 0,
         }))
     }
@@ -413,6 +423,8 @@ struct LiveDisplayUpdates {
     pending_cursor: Option<CursorInfo>,
     /// EGFX controller for H.264 frame delivery (if available).
     egfx: Option<EgfxController>,
+    /// Preferred encoder type from config (None = auto-detect).
+    encoder_preference: Option<rdp_encode::EncoderType>,
     /// H.264 encoder, lazily initialized on first EGFX frame.
     encoder: Option<GstEncoder>,
     /// Dimensions of the current encoder (0 = not yet initialized).
@@ -420,6 +432,10 @@ struct LiveDisplayUpdates {
     encoder_height: u32,
     /// Frame timestamp counter (milliseconds), monotonically increasing.
     frame_timestamp_ms: u32,
+    /// Whether we have completed the initial EGFX readiness wait.
+    /// Before processing frames, we poll for EGFX DVC negotiation
+    /// to avoid the race where PipeWire frames monopolize the runtime.
+    egfx_ready_waited: bool,
     /// Frames skipped while waiting for EGFX to become ready.
     /// After a timeout, fall back to bitmap delivery even if EGFX never
     /// negotiates (e.g. client connected with /gfx:off).
@@ -440,6 +456,25 @@ impl Drop for LiveDisplayUpdates {
 #[async_trait::async_trait]
 impl RdpServerDisplayUpdates for LiveDisplayUpdates {
     async fn next_update(&mut self) -> Result<Option<DisplayUpdate>> {
+        // Wait for EGFX DVC negotiation before processing frames.
+        // Without this, PipeWire frames flood next_update() and monopolize
+        // the async runtime, preventing the DVC negotiation task from
+        // completing. Poll with brief sleeps (like static_egfx_task does)
+        // to yield to the runtime between checks.
+        if !self.egfx_ready_waited {
+            if let Some(ref egfx) = self.egfx {
+                // Poll up to ~5 seconds (10 × 500ms) for EGFX readiness.
+                for _ in 0..10 {
+                    if egfx.is_ready() && egfx.supports_avc420() {
+                        tracing::info!("EGFX: channel ready for live capture");
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+            self.egfx_ready_waited = true;
+        }
+
         // If we have a buffered cursor update from a previous FrameAndCursor,
         // return it immediately before reading more events.
         if let Some(cursor) = self.pending_cursor.take() {
@@ -463,6 +498,7 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
                         &mut self.encoder_height,
                         &mut self.frame_timestamp_ms,
                         &frame,
+                        self.encoder_preference,
                     ) {
                         continue;
                     }
@@ -498,6 +534,7 @@ impl RdpServerDisplayUpdates for LiveDisplayUpdates {
                         &mut self.encoder_height,
                         &mut self.frame_timestamp_ms,
                         &frame,
+                        self.encoder_preference,
                     ) {
                         continue;
                     }
@@ -529,6 +566,7 @@ fn try_send_egfx_frame(
     encoder_height: &mut u32,
     timestamp_ms: &mut u32,
     frame: &CapturedFrame,
+    encoder_preference: Option<rdp_encode::EncoderType>,
 ) -> bool {
     let Some(egfx) = egfx else {
         return false;
@@ -559,6 +597,7 @@ fn try_send_egfx_frame(
         let config = EncoderConfig {
             width: frame.width,
             height: frame.height,
+            encoder_type: encoder_preference,
             ..EncoderConfig::default()
         };
         match GstEncoder::new(&config) {

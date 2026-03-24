@@ -14,7 +14,7 @@ pub mod bitmap;
 pub mod gstreamer_enc;
 
 pub use bitmap::BitmapEncoder;
-pub use gstreamer_enc::{EncoderType, GstEncoder};
+pub use gstreamer_enc::{EncoderType, GstEncoder, encoder_type_from_str};
 
 /// Configuration for the video encoder.
 #[derive(Debug, Clone)]
